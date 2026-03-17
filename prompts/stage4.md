@@ -1,81 +1,85 @@
-# Stage 4: Vulnerability Evaluation
+# Stage 4: Vulnerability Analysis — Single Entry Point
 
-You are performing **Stage 4** of an orchestrated network protocol security audit. Write your result to disk; do not print it in your response.
+You are performing **Stage 4** of an orchestrated network protocol security audit. Write your findings to disk; do not print them in your response.
 
 ## Your Task
 
-Evaluate one vulnerability finding from Stage 3.
+Perform deep security analysis of **one specific entry point** (`__EP_ID__` in module `__MODULE_ID__`).
 
-- **Finding file**: `__FINDING_FILE_PATH__`
-- **Output file**: `__OUTPUT_PATH__` (write here ONLY if the vulnerability is confirmed and severity ≥ Medium)
+- **Target project**: `__TARGET_PATH__`
+- **Stage 2 scope**: `__STAGE2_OUTPUT_PATH__`
+- **Result directory**: `__RESULT_DIR__`
+- **Finding file prefix**: `__FINDING_PREFIX__` (e.g., files will be named `__FINDING_PREFIX__-F-01.md`, `__FINDING_PREFIX__-F-02.md`, etc.)
+- **Security checklist**: `__CHECKLIST_PATH__`
+
+## Entry Point to Analyze
+
+```
+__EP_BLOCK__
+```
+
+## Core Methodology
+
+Use **data-flow-driven analysis**: starting from the entry point function, trace how attacker-controlled values propagate through local variables, struct fields, function arguments, loop bounds, buffer offsets, allocation sizes, and into dangerous sinks (memory operations, system calls, response construction, state updates).
+
+### Type-Specific Strategy
+
+- **Type P (Parser)**: Prioritize memory safety — buffer overflows, OOB access, integer overflows in length/offset calculations, malformed input handling, truncation errors.
+- **Type H (Handler)**: Prioritize logic and validation — improper field validation, injection into response construction, incorrect error handling, resource allocation from attacker-controlled values, access control.
+- **Type S (Session)**: Prioritize protocol correctness — state machine transitions, auth bypass via state confusion, session fixation, incomplete cleanup, cross-handler race conditions.
 
 ## Workflow
 
-### Step 1: Read the Finding File
+### Step 1: Read Stage 2 Scope
 
-Read `__FINDING_FILE_PATH__`. It contains one vulnerability finding with location, vulnerability class, root cause, preliminary severity, a code snippet, and reachability notes. The file also includes source context (module, entry point, target project path).
+Read `__STAGE2_OUTPUT_PATH__` for the project threat model. Let the threat model guide your analysis priorities.
 
-### Step 2: Verify Existence (False-Positive Check)
+### Step 2: Read the Security Checklist
 
-Read the relevant source code at the target project path. Perform an in-depth analysis:
-- Is the vulnerability reachable from attacker-controlled input?
-- Are there any mitigating conditions that make exploitation impossible?
-- Is the code path actually executed in the context described?
+Read `__CHECKLIST_PATH__` for a comprehensive list of vulnerability classes relevant to this project's language. Use it as your analysis guide — work through the checklist categories systematically.
 
-**If this is a false positive:** do NOT write any output file. The orchestrator will treat a missing output file as "filtered." Your task is complete — stop here.
+### Step 3: Analyze the Entry Point
 
-### Step 3: Assess Impact and Severity
+Perform in-depth analysis of the entry point defined above. Read the relevant source files (use `__TARGET_PATH__` as the project root). Trace attacker-controlled data through all code paths.
 
-If the vulnerability is real, analyze its security impact:
-- Determine what an attacker can achieve (RCE, DoS, info-leak, auth bypass, etc.)
-- Compute a CVSS v3.1 base score
-- Assign severity based on CVSS score:
-  - **Critical**: 9.0–10.0
-  - **High**: 7.0–8.9
-  - **Medium**: 4.0–6.9
-  - **Low**: 0.1–3.9
+For each security issue found, write a separate finding file. **Each file contains exactly one finding.**
 
-**If severity is below Medium:** do NOT write any output file. Your task is complete — stop here.
+### Step 4: Write Finding Files
 
-### Step 4: Write Evaluation Result
+For each confirmed finding, write one file to `__RESULT_DIR__/` named `__FINDING_PREFIX__-F-{NN}.md` (where `{NN}` is a zero-padded two-digit number: F-01, F-02, etc.).
 
-Write your evaluation to `__OUTPUT_PATH__`. Use **exactly** this format:
+**Each finding file must have this exact format:**
 
 ```markdown
-### Summary JSON Line
+<!-- Source context: Module __MODULE_ID__, Entry Point __EP_ID__ (__EP_TYPE__) -->
+<!-- Location: __LOCATION__ -->
+<!-- Target: __TARGET_PATH__ -->
 
-```json
-{
-  "id": "TBD",
-  "title": "...",
-  "location": "file:function (lines X-Y)",
-  "cwe_id": ["CWE-XXX"],
-  "vulnerability_class": ["class1", "class2"],
-  "cvss_score": "X.X",
-  "severity": "Critical|High|Medium|Low"
-}
+### F-{NN}: {Short Title}
+- **Location**: `{file}:{function}` (lines {X}-{Y})
+- **Vulnerability class**: {class}
+- **Root cause**: {description in 1-3 sentences}
+- **Preliminary severity**: {Critical|High|Medium|Low}
+- **Key code snippet**:
+```{lang}
+{5-30 lines of annotated code showing the vulnerability}
+```
+- **Reachability notes**: {how an attacker reaches this, prerequisites}
 ```
 
-### Detail
+**Format rules (strictly enforced by the built-in validator):**
+1. Heading must be `### F-{NN}:` followed by a space and the title.
+2. Required fields (each on its own `- **{name}**:` line): `Location`, `Vulnerability class`, `Root cause`, `Preliminary severity`.
+3. Severity must be exactly one of: `Critical`, `High`, `Medium`, `Low`.
+4. Nothing outside the source context comment and finding block — no intro paragraphs, extra headings, or closing remarks.
 
-- **ID**: TBD
-- **Title**: (short summary)
-- **Location**: (file path + function name + line numbers)
-- **Vulnerability class**: (e.g., "integer overflow leading to heap buffer overflow")
-- **CWE ID**: (e.g., CWE-122, CWE-190)
-- **Pre-requisites**: (specific compile features or run-time configuration required)
-- **Impact**: (RCE / DoS / info-leak / auth bypass / etc.)
-- **Severity**: (Critical / High / Medium / Low — must match JSON severity)
-- **Code snippet**: (paste the relevant lines with inline comments explaining the root cause and trigger path)
-```
-
-**IMPORTANT**: The `"id"` in the JSON and the `**ID**` in the Detail section must both be `TBD`. The orchestrator will assign the real ID after all evaluations complete.
-
-**IMPORTANT**: The output file MUST be parseable by the built-in Stage 4 validator. The JSON must be valid (no trailing commas, properly quoted strings).
+**If no findings for this entry point:** write no files. It is valid to produce zero finding files.
 
 ## Completion Checklist
 
-- [ ] Finding file read and source code verified
-- [ ] False-positive check performed
-- [ ] If confirmed: severity ≥ Medium and output written to `__OUTPUT_PATH__`
-- [ ] If false positive or < Medium: no output file written
+- [ ] Threat model read from Stage 2 output
+- [ ] Security checklist reviewed
+- [ ] Entry point source code read and analyzed
+- [ ] All attacker-controlled data paths traced to dangerous sinks
+- [ ] One finding file written per confirmed security issue (or zero files if no findings)
+- [ ] Each file passes the Stage 4 validator's format requirements

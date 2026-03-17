@@ -1,34 +1,31 @@
 import type { ValidationIssue } from "../config.js";
 
-import {
-  checkField,
-  readFileOrIssues,
-  stripCodeFence,
-  stripJsonComments,
-} from "./common.js";
+import { checkField, readFileOrIssues } from "./common.js";
 
-const REQUIRED_JSON_KEYS = [
-  "id",
-  "title",
-  "location",
-  "cwe_id",
-  "vulnerability_class",
-  "cvss_score",
-  "severity",
-];
-
-const REQUIRED_DETAIL_FIELDS = [
-  "ID",
-  "Title",
+const REQUIRED_FIELDS = [
   "Location",
   "Vulnerability class",
-  "CWE ID",
-  "Impact",
-  "Severity",
-  "Code snippet",
+  "Root cause",
+  "Preliminary severity",
 ];
 
 const VALID_SEVERITIES = new Set(["critical", "high", "medium", "low"]);
+
+function splitFindings(content: string): Array<{ findingId: string; block: string }> {
+  const splits = content.split(/###\s+(F-\d+)\s*:/);
+  const findings: Array<{ findingId: string; block: string }> = [];
+
+  for (let index = 1; index < splits.length - 1; index += 2) {
+    const findingId = splits[index];
+    const block = splits[index + 1];
+    if (!findingId || block === undefined) {
+      continue;
+    }
+    findings.push({ findingId, block });
+  }
+
+  return findings;
+}
 
 export function validateStage4File(filePath: string): ValidationIssue[] {
   const { content, issues } = readFileOrIssues(filePath);
@@ -39,89 +36,51 @@ export function validateStage4File(filePath: string): ValidationIssue[] {
   if (!content.trim()) {
     return [
       {
-        description: "Output file is empty.",
-        expected: "A finding file with Summary JSON Line and Detail sections.",
-        fix: "Write the finding with both '### Summary JSON Line' and '### Detail' sections.",
+        description: "Finding file is empty.",
+        expected: "A single finding block (### F-{NN}: title) with required fields.",
+        fix: "Write the finding block, or delete the file if there are no findings for this entry point.",
+      },
+    ];
+  }
+
+  const findings = splitFindings(content);
+  if (findings.length === 0) {
+    return [
+      {
+        description: "No finding block found.",
+        expected: '"### F-{NN}: [Short Title]" block (e.g., "### F-01: Buffer Overflow in parse_options").',
+        fix: 'Add a finding block using the format "### F-01: [Short Title]".',
       },
     ];
   }
 
   const validationIssues: ValidationIssue[] = [];
-  const jsonMatch = /###\s*Summary JSON Line\s*\n([\s\S]*?)(?=###\s*Detail|$)/.exec(content);
-  if (!jsonMatch) {
+  if (findings.length > 1) {
     validationIssues.push({
-      description: 'Missing "### Summary JSON Line" section.',
-      expected: 'A "### Summary JSON Line" heading followed by a JSON block.',
-      fix: 'Add a "### Summary JSON Line" section before "### Detail" containing the finding\'s JSON summary.',
+      description: `File contains ${findings.length} finding blocks; expected exactly 1.`,
+      expected: "Each finding file must contain exactly one finding block.",
+      fix: "Split multiple findings into separate files, one finding per file.",
     });
-  } else {
-    const jsonText = stripJsonComments(stripCodeFence((jsonMatch[1] ?? "").trim()));
-    if (!jsonText) {
-      validationIssues.push({
-        description: "Summary JSON Line section is empty.",
-        expected: "A valid JSON object with finding metadata.",
-        fix: `Add the JSON summary object with required keys: ${REQUIRED_JSON_KEYS.join(", ")}`,
-      });
-    } else {
-      let summary: Record<string, unknown> | null = null;
-      try {
-        summary = JSON.parse(jsonText) as Record<string, unknown>;
-      } catch (error) {
-        validationIssues.push({
-          description: `Summary JSON is not valid JSON: ${String(error)}`,
-          expected: "A valid JSON object.",
-          fix: "Fix the JSON syntax error. Common issues: trailing commas, missing quotes, unescaped characters.",
-        });
-      }
-
-      if (summary) {
-        for (const key of REQUIRED_JSON_KEYS) {
-          if (!(key in summary)) {
-            validationIssues.push({
-              description: `JSON missing required key: "${key}".`,
-              expected: `The JSON object must contain "${key}".`,
-              fix: `Add "${key}": "<value>" to the JSON object.`,
-            });
-          }
-        }
-
-        const severity = typeof summary.severity === "string" ? summary.severity : "";
-        if (severity && !VALID_SEVERITIES.has(severity.toLowerCase())) {
-          validationIssues.push({
-            description: `Invalid severity in JSON: "${severity}".`,
-            expected: "Severity must be one of: Critical, High, Medium, Low.",
-            fix: 'Change "severity" to one of: "Critical", "High", "Medium", "Low".',
-          });
-        }
-      }
-    }
   }
 
-  const detailMatch = /###\s*Detail\s*\n([\s\S]*)/.exec(content);
-  if (!detailMatch) {
-    validationIssues.push({
-      description: 'Missing "### Detail" section.',
-      expected: 'A "### Detail" heading followed by finding details.',
-      fix: `Add a "### Detail" section with the required fields: ${REQUIRED_DETAIL_FIELDS.join(", ")}`,
-    });
-  } else {
-    const detailText = (detailMatch[1] ?? "").trim();
-    if (!detailText) {
-      validationIssues.push({
-        description: "Detail section is empty.",
-        expected: "Finding details with required fields.",
-        fix: `Fill in the Detail section with: ${REQUIRED_DETAIL_FIELDS.join(", ")}`,
-      });
-    } else {
-      for (const field of REQUIRED_DETAIL_FIELDS) {
-        if (checkField(detailText, field) === null) {
-          validationIssues.push({
-            description: `Detail section missing required field "**${field}**".`,
-            expected: `A "- **${field}**: ..." line in the Detail section.`,
-            fix: `Add "- **${field}**: <value>" to the Detail section.`,
-          });
-        }
+  for (const { findingId, block } of findings) {
+    for (const field of REQUIRED_FIELDS) {
+      if (checkField(block, field) === null) {
+        validationIssues.push({
+          description: `${findingId}: Missing required field "**${field}**".`,
+          expected: `Each finding must have a "- **${field}**: ..." line.`,
+          fix: `Add "- **${field}**: <value>" to the ${findingId} block.`,
+        });
       }
+    }
+
+    const severity = checkField(block, "Preliminary severity");
+    if (severity && !VALID_SEVERITIES.has(severity.toLowerCase())) {
+      validationIssues.push({
+        description: `${findingId}: Invalid Preliminary severity value "${severity}".`,
+        expected: "Severity must be one of: Critical, High, Medium, Low.",
+        fix: `Change the Preliminary severity of ${findingId} to one of: Critical, High, Medium, Low.`,
+      });
     }
   }
 

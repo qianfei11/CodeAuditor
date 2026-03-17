@@ -1,44 +1,53 @@
 import fs from "node:fs";
 
-import type { EntryPoint } from "../config.js";
+import type { Module } from "../config.js";
 
-function getField(block: string, fieldName: string): string {
-  const pattern = new RegExp(`\\*\\*${fieldName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\*\\*\\s*:\\s*(.+)`);
-  const match = pattern.exec(block);
-  return match?.[1]?.trim() ?? "";
-}
+function extractModules(content: string): Module[] {
+  const sectionMatch = /##\s+Module Structure\s*\n([\s\S]*?)(?=\n## |$)/.exec(content);
+  if (!sectionMatch) {
+    return [];
+  }
 
-function extractEntryPoints(content: string, moduleId: string): EntryPoint[] {
-  const splits = content.split(/###\s+EP-(\d+)\s*:/);
-  const entryPoints: EntryPoint[] = [];
+  const section = sectionMatch[1] ?? "";
+  const modules: Module[] = [];
 
-  for (let index = 1; index < splits.length - 1; index += 2) {
-    const epNumber = splits[index];
-    const block = splits[index + 1];
-    if (!epNumber || block === undefined) {
+  for (const rawLine of section.split(/\r?\n/)) {
+    const line = rawLine.trim();
+    if (!line.startsWith("|")) {
       continue;
     }
 
-    const typeRaw = getField(block, "Type");
-    const typeLetter = typeRaw.split(/\s+/, 1)[0]?.replace(/[()]/g, "").toUpperCase() || "P";
-    const epId = `EP-${epNumber}`;
+    const cells = line
+      .replace(/^\|/, "")
+      .replace(/\|$/, "")
+      .split("|")
+      .map((cell) => cell.trim());
 
-    entryPoints.push({
-      id: epId,
-      moduleId,
-      type: typeLetter,
-      moduleName: getField(block, "Module Name"),
-      location: getField(block, "Location"),
-      attackerControlledData: getField(block, "Attacker-controlled data"),
-      initialValidation: getField(block, "Initial validation observed"),
-      analysisHints: getField(block, "Analysis hints"),
-      rawBlock: `### ${epId}:\n${block}`,
+    if (cells.length < 5) {
+      continue;
+    }
+
+    const [moduleId = "", name = "", description = "", filesDir = "", verdict = ""] = cells;
+    if (!/^M-\d+$/.test(moduleId)) {
+      continue;
+    }
+
+    modules.push({
+      id: moduleId,
+      name,
+      description,
+      filesDir,
+      analyze: verdict.toLowerCase().includes("yes"),
     });
   }
 
-  return entryPoints;
+  return modules;
 }
 
-export function parseEntryPoints(filePath: string, moduleId: string): EntryPoint[] {
-  return extractEntryPoints(fs.readFileSync(filePath, "utf8"), moduleId);
+export function parseModules(filePath: string): Module[] {
+  return extractModules(fs.readFileSync(filePath, "utf8"));
+}
+
+export function getInScopeModules(filePath: string): Module[] {
+  return parseModules(filePath).filter((module) => module.analyze);
 }

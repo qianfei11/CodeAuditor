@@ -10,10 +10,10 @@ export async function runSetup(config: AuditConfig): Promise<void> {
   const directories = [
     config.outputDir,
     path.join(config.outputDir, ".markers"),
-    path.join(config.outputDir, "stage-2-details"),
     path.join(config.outputDir, "stage-3-details"),
     path.join(config.outputDir, "stage-4-details"),
-    path.join(config.outputDir, "stage-4-details", "_pending"),
+    path.join(config.outputDir, "stage-5-details"),
+    path.join(config.outputDir, "stage-5-details", "_pending"),
   ];
 
   for (const directory of directories) {

@@ -44,12 +44,11 @@ export class CheckpointManager {
 
   private resolve(taskKey: string): string | null {
     if (taskKey === "stage1") {
-      return path.join(this.outputDir, "stage-1-scope.md");
+      return path.join(this.outputDir, "stage-1-research.md");
     }
 
-    if (taskKey.startsWith("stage2:")) {
-      const moduleId = taskKey.split(":", 2)[1];
-      return path.join(this.outputDir, "stage-2-details", `${moduleId}.md`);
+    if (taskKey === "stage2") {
+      return path.join(this.outputDir, "stage-2-scope.md");
     }
 
     if (taskKey.startsWith("stage3:")) {
@@ -57,16 +56,15 @@ export class CheckpointManager {
     }
 
     if (taskKey.startsWith("stage4:")) {
-      const marker = this.markerPath(taskKey);
-      if (fs.existsSync(marker)) {
-        return marker;
-      }
-
-      const stage3Filename = taskKey.split(":", 2)[1] ?? "";
-      return path.join(this.outputDir, "stage-4-details", "_pending", stage3Filename);
+      return this.markerPath(taskKey);
     }
 
-    if (taskKey === "stage5") {
+    if (taskKey.startsWith("stage5:")) {
+      const stage4Filename = taskKey.slice("stage5:".length);
+      return path.join(this.outputDir, "stage-5-details", "_pending", stage4Filename);
+    }
+
+    if (taskKey === "stage6") {
       return path.join(this.outputDir, "report.md");
     }
 

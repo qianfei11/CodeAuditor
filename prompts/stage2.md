@@ -1,60 +1,93 @@
-# Stage 2: Identify Analysis Entry Points
+# Stage 2: Orient and Scope
 
 You are performing **Stage 2** of an orchestrated network protocol security audit. Write your analysis to disk; do not print it in your response.
 
 ## Your Task
 
-Identify vulnerability-productive entry points for module **__MODULE_ID__**.
+Analyze the project at **__TARGET_PATH__** and produce a scope document at **__OUTPUT_PATH__**.
 
-- **Stage 1 output**: `__STAGE1_OUTPUT_PATH__`
-- **Result directory**: `__RESULT_DIR__`
-- **Your module**: `__MODULE_ID__`
+- **Research report**: `__RESEARCH_PATH__`
+- **Initial threat model**: __THREAT_MODEL__
 
-## Entry Point Types
+## User Instructions
 
-- **Type P (Parser)**: Functions that deserialize raw bytes from the network into structured data.
-- **Type H (Handler)**: Per-message business logic that processes already-parsed protocol messages.
-- **Type S (Session)**: Cross-handler session management, authentication, and state machine logic.
+__USER_INSTRUCTIONS__
 
 ## Workflow
 
-### Step 1: Read Stage 1 Output
+### Step 1: Read the Research Report
 
-Read `__STAGE1_OUTPUT_PATH__` to identify project metadata, the threat model, and the module's name, description, and file paths.
+Read `__RESEARCH_PATH__` completely before doing anything else. Extract:
 
-### Step 2: Create Result File
+- **Threat Model Conclusions** — Priority Vulnerability Classes, Out of Scope, Attacker Profile, and High-Risk Modules and Subsystems
+- **Vulnerability Patterns for Follow-On Audit** — recurring weakness types to prioritize
+- Any modules or subsystems explicitly flagged as high-risk
 
-Create an empty file `__RESULT_DIR__/__MODULE_ID__.md`. You will write entry points into it as you find them.
+This report is the primary input for threat model finalization and module scoping. High-Risk Modules listed there should default to `Yes` for Stage 3 analysis unless there is a strong reason to exclude them.
 
-### Step 3: Identify Entry Points
+### Step 2: Understand the Protocol (if needed)
 
-Read the module's source code and identify vulnerability-productive entry points. For each:
-- Determine where attacker-controlled data first enters the module
-- Identify what data is attacker-controlled
-- Classify the entry point type (P, H, or S)
-- Note any initial validation performed
-- Write analysis hints for Stage 3
+This step is only necessary if the protocol(s) implemented by the project is a custom or uncommon protocol. For well-known protocols (HTTP, DNS, FTP, etc.), skip to Step 3.
 
-Assign sequential IDs: EP-1, EP-2, EP-3, ...
+Gather information about the protocol from:
+- The project's documentation, README, or design documents
+- Source files that define message structures, parsing code, or state machines
 
-**IMPORTANT:** Focus on entry points likely to yield findings — complex parsing, unsafe operations, sensitive state management. Omit trivial helpers and read-only accessors.
+### Step 3: Determine Implementation Role
 
-### Step 4: Write Entry Points to Result File
+Determine whether the project implements the **client side**, **server side**, or **both sides** of the protocol:
 
-Write findings incrementally to `__RESULT_DIR__/__MODULE_ID__.md` using this format for each entry point:
+- **Server-side**: The attacker is a malicious client sending crafted requests.
+- **Client-side**: The attacker is a malicious server (or MITM) replying with crafted messages.
+- **Both**: Both sides must be audited independently.
+
+### Step 4: Finalize Threat Model
+
+Combine the following inputs to produce a concise, final threat model statement:
+
+1. The **Threat Model Conclusions** from `__RESEARCH_PATH__` (primary source — historical evidence takes precedence)
+2. The initial threat model provided above
+3. The user instructions
+4. Any project security policy found in the repository
+
+The final threat model must name: the attacker, their capabilities, the attack surface, which vulnerability classes are priority focus, and which issues are out of scope.
+
+### Step 5: Enumerate Modules and Protocol Implementations
+
+Identify the project's structure and group related source files into **modules** that implement a cohesive protocol or subsystem. For each module, decide whether it falls within the audit scope and is vulnerability-productive enough for deeper analysis.
+
+Cross-reference the **High-Risk Modules and Subsystems** from the research report — those should default to `Yes` unless there is a strong reason to exclude them.
+
+**IMPORTANT:** Each module will be processed independently. Ensure modules are self-contained and cohesive.
+
+### Step 6: Write Output
+
+Write your output to **__OUTPUT_PATH__** using the available file editing tools. The file must have this exact structure:
 
 ```markdown
-### EP-{N}:
-- **Type**: P (Parser) / H (Handler) / S (Session)
-- **Module Name**: ...
-- **Location**: `function_name` at `file:line`
-- **Attacker-controlled data**: (which fields/variables are attacker-controlled)
-- **Initial validation observed**: (describe validation, or "None")
-- **Analysis hints**: (what Stage 3 should focus on)
+# Orient and Scope
+
+## Project Summary
+(project path, name, language, brief description of functionality and protocols, client/server role)
+
+## Threat Model
+(final threat model, derived from research conclusions + initial threat model + user instructions)
+
+## Module Structure
+
+| ID | Module | Description | Files / Directory | Analyze in Stage 3 |
+|----|--------|-------------|-------------------|--------------------|
+| M-1 | [name] | [short description] | [files or dir] | Yes / No |
+| M-2 | ... | ... | ... | ... |
 ```
+
+**IMPORTANT**: Write the output to **__OUTPUT_PATH__** using the available file editing tools. Do not return the content in your response.
 
 ## Completion Checklist
 
-- [ ] All vulnerability-productive entry points identified
-- [ ] Entry points written to `__RESULT_DIR__/__MODULE_ID__.md`
-- [ ] Each entry point has Type, Module Name, Location, Attacker-controlled data, Initial validation observed, Analysis hints
+- [ ] Research report read and Threat Model Conclusions extracted
+- [ ] Protocol(s) understood or confirmed well-known
+- [ ] Client/server role identified
+- [ ] Threat model finalized (incorporating research conclusions as primary input)
+- [ ] Modules enumerated with analysis verdicts (high-risk modules from research defaulting to Yes)
+- [ ] Output written to **__OUTPUT_PATH__**

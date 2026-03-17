@@ -4,16 +4,16 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 
-import { getInScopeModules } from "../parsing/stage1.js";
-import { parseEntryPoints } from "../parsing/stage2.js";
+import { getInScopeModules } from "../parsing/stage2.js";
+import { parseEntryPoints } from "../parsing/stage3.js";
 import { generateReport } from "../report/generate.js";
-import { validateStage4File } from "../validation/stage4.js";
+import { validateStage5File } from "../validation/stage5.js";
 
-test("stage1 parser returns only in-scope modules", async () => {
-  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "protocol-auditor-stage1-"));
-  const stage1Path = path.join(tempDir, "stage-1-scope.md");
+test("stage2 parser returns only in-scope modules", async () => {
+  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "protocol-auditor-stage2-"));
+  const stage2Path = path.join(tempDir, "stage-2-scope.md");
   await fs.writeFile(
-    stage1Path,
+    stage2Path,
     `# Orient and Scope
 
 ## Project Summary
@@ -24,23 +24,23 @@ Example threat model.
 
 ## Module Structure
 
-| ID | Module | Description | Files / Directory | Analyze in Stage 2 |
-|----|--------|-------------|-------------------|-------------------|
+| ID | Module | Description | Files / Directory | Analyze in Stage 3 |
+|----|--------|-------------|-------------------|--------------------|
 | M-1 | Parser | Core parser | src/parser | Yes |
 | M-2 | Utils | Utility helpers | src/utils | No |
 `,
   );
 
-  const modules = getInScopeModules(stage1Path);
+  const modules = getInScopeModules(stage2Path);
   assert.equal(modules.length, 1);
   assert.equal(modules[0]?.id, "M-1");
 });
 
-test("stage2 parser extracts entry points", async () => {
-  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "protocol-auditor-stage2-"));
-  const stage2Path = path.join(tempDir, "M-1.md");
+test("stage3 parser extracts entry points", async () => {
+  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "protocol-auditor-stage3-"));
+  const stage3Path = path.join(tempDir, "M-1.md");
   await fs.writeFile(
-    stage2Path,
+    stage3Path,
     `### EP-1:
 - **Type**: P (Parser)
 - **Module Name**: DHCP parser
@@ -51,22 +51,22 @@ test("stage2 parser extracts entry points", async () => {
 `,
   );
 
-  const entryPoints = parseEntryPoints(stage2Path, "M-1");
+  const entryPoints = parseEntryPoints(stage3Path, "M-1");
   assert.equal(entryPoints.length, 1);
   assert.equal(entryPoints[0]?.type, "P");
   assert.equal(entryPoints[0]?.moduleId, "M-1");
 });
 
-test("stage4 validator and report generator accept fenced JSON", async () => {
+test("stage5 validator and report generator accept fenced JSON", async () => {
   const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "protocol-auditor-report-"));
-  const stage1Path = path.join(tempDir, "stage-1-scope.md");
-  const stage4Dir = path.join(tempDir, "stage-4-details");
+  const stage2Path = path.join(tempDir, "stage-2-scope.md");
+  const stage5Dir = path.join(tempDir, "stage-5-details");
   const reportPath = path.join(tempDir, "report.md");
-  const findingPath = path.join(stage4Dir, "H-01.md");
+  const findingPath = path.join(stage5Dir, "H-01.md");
 
-  await fs.mkdir(stage4Dir, { recursive: true });
+  await fs.mkdir(stage5Dir, { recursive: true });
   await fs.writeFile(
-    stage1Path,
+    stage2Path,
     `# Orient and Scope
 
 ## Project Summary
@@ -105,9 +105,9 @@ Network attacker.
 `,
   );
 
-  assert.deepEqual(validateStage4File(findingPath), []);
+  assert.deepEqual(validateStage5File(findingPath), []);
 
-  const summary = generateReport(stage1Path, stage4Dir, reportPath);
+  const summary = generateReport(stage2Path, stage5Dir, reportPath);
   const reportContent = await fs.readFile(reportPath, "utf8");
 
   assert.equal(summary.totalFindings, 1);

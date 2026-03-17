@@ -3,28 +3,27 @@ import type { ValidationIssue } from "../config.js";
 import { checkField, readFileOrIssues } from "./common.js";
 
 const REQUIRED_FIELDS = [
+  "Type",
   "Location",
-  "Vulnerability class",
-  "Root cause",
-  "Preliminary severity",
+  "Attacker-controlled data",
+  "Analysis hints",
 ];
+const VALID_TYPES = new Set(["p", "h", "s", "parser", "handler", "session"]);
 
-const VALID_SEVERITIES = new Set(["critical", "high", "medium", "low"]);
-
-function splitFindings(content: string): Array<{ findingId: string; block: string }> {
-  const splits = content.split(/###\s+(F-\d+)\s*:/);
-  const findings: Array<{ findingId: string; block: string }> = [];
+function splitEntryPoints(content: string): Array<{ epId: string; block: string }> {
+  const splits = content.split(/###\s+EP-(\d+)\s*:/);
+  const results: Array<{ epId: string; block: string }> = [];
 
   for (let index = 1; index < splits.length - 1; index += 2) {
-    const findingId = splits[index];
+    const number = splits[index];
     const block = splits[index + 1];
-    if (!findingId || block === undefined) {
+    if (!number || block === undefined) {
       continue;
     }
-    findings.push({ findingId, block });
+    results.push({ epId: `EP-${number}`, block });
   }
 
-  return findings;
+  return results;
 }
 
 export function validateStage3File(filePath: string): ValidationIssue[] {
@@ -36,51 +35,55 @@ export function validateStage3File(filePath: string): ValidationIssue[] {
   if (!content.trim()) {
     return [
       {
-        description: "Finding file is empty.",
-        expected: "A single finding block (### F-{NN}: title) with required fields.",
-        fix: "Write the finding block, or delete the file if there are no findings for this entry point.",
+        description: "Output file is empty.",
+        expected: "At least one entry point block (### EP-{N}:) with required fields.",
+        fix: "Write the identified entry points to this file.",
       },
     ];
   }
 
-  const findings = splitFindings(content);
-  if (findings.length === 0) {
+  const entryPoints = splitEntryPoints(content);
+  if (entryPoints.length === 0) {
     return [
       {
-        description: "No finding block found.",
-        expected: '"### F-{NN}: [Short Title]" block (e.g., "### F-01: Buffer Overflow in parse_options").',
-        fix: 'Add a finding block using the format "### F-01: [Short Title]".',
+        description: "No entry point blocks found.",
+        expected: 'At least one "### EP-{N}:" block (e.g., "### EP-1:").',
+        fix: 'Add entry point blocks using the format "### EP-1:" followed by the required fields.',
       },
     ];
   }
 
   const validationIssues: ValidationIssue[] = [];
-  if (findings.length > 1) {
-    validationIssues.push({
-      description: `File contains ${findings.length} finding blocks; expected exactly 1.`,
-      expected: "Each finding file must contain exactly one finding block.",
-      fix: "Split multiple findings into separate files, one finding per file.",
-    });
-  }
-
-  for (const { findingId, block } of findings) {
+  for (const { epId, block } of entryPoints) {
     for (const field of REQUIRED_FIELDS) {
-      if (checkField(block, field) === null) {
+      const value = checkField(block, field);
+      if (value === null) {
         validationIssues.push({
-          description: `${findingId}: Missing required field "**${field}**".`,
-          expected: `Each finding must have a "- **${field}**: ..." line.`,
-          fix: `Add "- **${field}**: <value>" to the ${findingId} block.`,
+          description: `${epId}: Missing required field "**${field}**".`,
+          expected: `Each entry point must have a "- **${field}**: ..." line.`,
+          fix: `Add "- **${field}**: <value>" to the ${epId} block.`,
         });
+      } else if (!value || ["none", "n/a", "..."].includes(value.toLowerCase())) {
+        if (field === "Type" || field === "Location") {
+          validationIssues.push({
+            description: `${epId}: Field "**${field}**" has placeholder or empty value: "${value}".`,
+            expected: `A concrete value for ${field}.`,
+            fix: `Fill in the actual ${field} for ${epId}.`,
+          });
+        }
       }
     }
 
-    const severity = checkField(block, "Preliminary severity");
-    if (severity && !VALID_SEVERITIES.has(severity.toLowerCase())) {
-      validationIssues.push({
-        description: `${findingId}: Invalid Preliminary severity value "${severity}".`,
-        expected: "Severity must be one of: Critical, High, Medium, Low.",
-        fix: `Change the Preliminary severity of ${findingId} to one of: Critical, High, Medium, Low.`,
-      });
+    const typeValue = checkField(block, "Type");
+    if (typeValue) {
+      const typeToken = typeValue.split(/\s+/, 1)[0]?.replace(/[()]/g, "").toLowerCase() ?? "";
+      if (!VALID_TYPES.has(typeToken)) {
+        validationIssues.push({
+          description: `${epId}: Invalid Type value "${typeValue}".`,
+          expected: 'Type must be one of: P (Parser), H (Handler), S (Session).',
+          fix: `Change the Type of ${epId} to "P (Parser)", "H (Handler)", or "S (Session)".`,
+        });
+      }
     }
   }
 

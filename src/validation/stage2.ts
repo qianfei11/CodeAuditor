@@ -1,30 +1,6 @@
 import type { ValidationIssue } from "../config.js";
 
-import { checkField, readFileOrIssues } from "./common.js";
-
-const REQUIRED_FIELDS = [
-  "Type",
-  "Location",
-  "Attacker-controlled data",
-  "Analysis hints",
-];
-const VALID_TYPES = new Set(["p", "h", "s", "parser", "handler", "session"]);
-
-function splitEntryPoints(content: string): Array<{ epId: string; block: string }> {
-  const splits = content.split(/###\s+EP-(\d+)\s*:/);
-  const results: Array<{ epId: string; block: string }> = [];
-
-  for (let index = 1; index < splits.length - 1; index += 2) {
-    const number = splits[index];
-    const block = splits[index + 1];
-    if (!number || block === undefined) {
-      continue;
-    }
-    results.push({ epId: `EP-${number}`, block });
-  }
-
-  return results;
-}
+import { findSection, parseMarkdownTableRows, readFileOrIssues } from "./common.js";
 
 export function validateStage2File(filePath: string): ValidationIssue[] {
   const { content, issues } = readFileOrIssues(filePath);
@@ -36,52 +12,74 @@ export function validateStage2File(filePath: string): ValidationIssue[] {
     return [
       {
         description: "Output file is empty.",
-        expected: "At least one entry point block (### EP-{N}:) with required fields.",
-        fix: "Write the identified entry points to this file.",
-      },
-    ];
-  }
-
-  const entryPoints = splitEntryPoints(content);
-  if (entryPoints.length === 0) {
-    return [
-      {
-        description: "No entry point blocks found.",
-        expected: 'At least one "### EP-{N}:" block (e.g., "### EP-1:").',
-        fix: 'Add entry point blocks using the format "### EP-1:" followed by the required fields.',
+        expected: "A markdown file with Project Summary, Threat Model, and Module Structure sections.",
+        fix: "Write the full Stage 2 output to this file.",
       },
     ];
   }
 
   const validationIssues: ValidationIssue[] = [];
-  for (const { epId, block } of entryPoints) {
-    for (const field of REQUIRED_FIELDS) {
-      const value = checkField(block, field);
-      if (value === null) {
-        validationIssues.push({
-          description: `${epId}: Missing required field "**${field}**".`,
-          expected: `Each entry point must have a "- **${field}**: ..." line.`,
-          fix: `Add "- **${field}**: <value>" to the ${epId} block.`,
-        });
-      } else if (!value || ["none", "n/a", "..."].includes(value.toLowerCase())) {
-        if (field === "Type" || field === "Location") {
-          validationIssues.push({
-            description: `${epId}: Field "**${field}**" has placeholder or empty value: "${value}".`,
-            expected: `A concrete value for ${field}.`,
-            fix: `Fill in the actual ${field} for ${epId}.`,
-          });
-        }
-      }
+
+  for (const sectionName of ["Project Summary", "Threat Model", "Module Structure"]) {
+    const section = findSection(content, sectionName);
+    if (section === null) {
+      validationIssues.push({
+        description: `Missing required section: "## ${sectionName}"`,
+        expected: `A "## ${sectionName}" heading must be present.`,
+        fix: `Add a "## ${sectionName}" section with appropriate content.`,
+      });
+      continue;
     }
 
-    const typeValue = checkField(block, "Type");
-    if (typeValue) {
-      const typeToken = typeValue.split(/\s+/, 1)[0]?.replace(/[()]/g, "").toLowerCase() ?? "";
-      if (!VALID_TYPES.has(typeToken)) {
+    if (!section.trim()) {
+      validationIssues.push({
+        description: `Section "## ${sectionName}" is empty.`,
+        expected: "This section must contain content.",
+        fix: `Fill in the ${sectionName} section with the relevant information.`,
+      });
+    }
+  }
+
+  const moduleSection = findSection(content, "Module Structure");
+  if (moduleSection !== null) {
+    const rows = parseMarkdownTableRows(moduleSection);
+    if (rows.length === 0) {
+      validationIssues.push({
+        description: "No data rows found in the Module Structure table.",
+        expected: "A markdown table with at least one module row.",
+        fix: "Add module rows to the table. Each row needs: ID, Module, Description, Files/Directory, Analyze verdict.",
+      });
+    } else {
+      let hasYes = false;
+      rows.forEach((cells, index) => {
+        if (cells.length < 5) {
+          validationIssues.push({
+            description: `Module table row ${index + 1} has ${cells.length} columns (expected at least 5).`,
+            expected: "Columns: ID | Module | Description | Files / Directory | Analyze in Stage 3",
+            fix: `Ensure row ${index + 1} has all 5 columns separated by '|'.`,
+          });
+          return;
+        }
+
+        const moduleId = cells[0] ?? "";
+        if (!/^M-\d+$/.test(moduleId)) {
+          validationIssues.push({
+            description: `Module ID "${moduleId}" in row ${index + 1} does not match expected format.`,
+            expected: 'Module IDs must match pattern "M-{N}" (e.g., "M-1", "M-2").',
+            fix: `Change "${moduleId}" to "M-{N}" format (e.g., "M-${index + 1}").`,
+          });
+        }
+
+        if ((cells[4] ?? "").toLowerCase().includes("yes")) {
+          hasYes = true;
+        }
+      });
+
+      if (!hasYes) {
         validationIssues.push({
-          description: `${epId}: Invalid Type value "${typeValue}".`,
-          expected: 'Type must be one of: P (Parser), H (Handler), S (Session).',
-          fix: `Change the Type of ${epId} to "P (Parser)", "H (Handler)", or "S (Session)".`,
+          description: "No module is marked for analysis (no 'Yes' in 'Analyze in Stage 3' column).",
+          expected: "At least one module should be marked 'Yes' for Stage 3 analysis.",
+          fix: "Mark at least one relevant module with 'Yes' in the last column.",
         });
       }
     }

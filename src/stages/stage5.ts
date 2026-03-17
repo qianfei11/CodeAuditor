@@ -1,35 +1,240 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 
+import { runAgent } from "../agents/index.js";
 import { CheckpointManager } from "../checkpoint.js";
 import type { AuditConfig } from "../config.js";
 import { getLogger } from "../logger.js";
-import { generateReport } from "../report/generate.js";
+import { loadPrompt } from "../prompts.js";
+import {
+  coerceError,
+  compareSeverityThenId,
+  formatValidationIssues,
+  listMarkdownFiles,
+  pathExists,
+  runParallelLimited,
+} from "../utils.js";
+import { stripCodeFence, stripJsonComments } from "../validation/common.js";
+import { validateStage5File } from "../validation/stage5.js";
 
 const logger = getLogger("stage5");
-const TASK_KEY = "stage5";
 
-export async function runStage5(
+type Severity = "Critical" | "High" | "Medium" | "Low";
+
+const SEVERITY_ORDER: Severity[] = ["Critical", "High", "Medium", "Low"];
+const SEVERITY_PREFIX: Record<Severity, string> = {
+  Critical: "C",
+  High: "H",
+  Medium: "M",
+  Low: "L",
+};
+const VALID_SEVERITIES = new Set(["critical", "high", "medium", "low"]);
+
+function taskKey(stage4Filename: string): string {
+  return `stage5:${stage4Filename}`;
+}
+
+async function readSeverityFromPending(filePath: string): Promise<string | null> {
+  try {
+    const content = await fs.readFile(filePath, "utf8");
+    const match = /###\s*Summary JSON Line\s*\n([\s\S]*?)(?=###\s*Detail|$)/.exec(content);
+    if (!match) {
+      return null;
+    }
+    const summary = JSON.parse(stripJsonComments(stripCodeFence((match[1] ?? "").trim()))) as {
+      severity?: string;
+    };
+    return summary.severity ?? null;
+  } catch (error) {
+    logger.warning("Failed to read severity from %s: %s", filePath, coerceError(error).message);
+    return null;
+  }
+}
+
+async function readExistingId(filePath: string): Promise<string | null> {
+  try {
+    const content = await fs.readFile(filePath, "utf8");
+    const match = /"id"\s*:\s*"([A-Z]-\d+)"/.exec(content);
+    return match?.[1] ?? null;
+  } catch {
+    return null;
+  }
+}
+
+function normalizeSeverity(value: string): Severity | null {
+  switch (value.toLowerCase()) {
+    case "critical":
+      return "Critical";
+    case "high":
+      return "High";
+    case "medium":
+      return "Medium";
+    case "low":
+      return "Low";
+    default:
+      return null;
+  }
+}
+
+async function injectIdIntoFile(filePath: string, realId: string): Promise<void> {
+  const content = await fs.readFile(filePath, "utf8");
+  const updated = content
+    .replace(/"id"\s*:\s*"TBD"/, `"id": "${realId}"`)
+    .replace(/\*\*ID\*\*\s*:\s*TBD/, `**ID**: ${realId}`);
+  await fs.writeFile(filePath, updated);
+}
+
+async function listExistingFinalFiles(stage5Dir: string): Promise<string[]> {
+  const files = await listMarkdownFiles(stage5Dir);
+  return files.filter((filePath) => path.basename(filePath) !== "_pending");
+}
+
+async function runFinding(
+  stage4FilePath: string,
   config: AuditConfig,
   checkpoint: CheckpointManager,
-): Promise<string> {
-  const reportPath = path.join(config.outputDir, "report.md");
+): Promise<string | null> {
+  const stage4Filename = path.basename(stage4FilePath);
+  const key = taskKey(stage4Filename);
+  const pendingDir = path.join(config.outputDir, "stage-5-details", "_pending");
+  const pendingPath = path.join(pendingDir, stage4Filename);
 
-  if (checkpoint.isComplete(TASK_KEY)) {
-    logger.info("Stage 5 already complete.");
-    return reportPath;
+  if (checkpoint.isComplete(key)) {
+    logger.info("Stage 5: %s already complete, skipping.", stage4Filename);
+    return (await pathExists(pendingPath)) ? pendingPath : null;
   }
 
-  const stage1Scope = path.join(config.outputDir, "stage-1-scope.md");
-  const stage4Dir = path.join(config.outputDir, "stage-4-details");
-  const summary = generateReport(stage1Scope, stage4Dir, reportPath);
-  const stat = await fs.stat(reportPath);
-  if (stat.size === 0) {
-    throw new Error(`Report file missing or empty: ${reportPath}`);
+  const prompt = await loadPrompt("stage5.md", {
+    finding_file_path: stage4FilePath,
+    output_path: pendingPath,
+  });
+
+  await runAgent({
+    prompt,
+    config,
+    cwd: config.target,
+  });
+
+  const confirmed = await pathExists(pendingPath);
+  if (confirmed) {
+    let issues = validateStage5File(pendingPath);
+    if (issues.length > 0) {
+      logger.warning("Stage 5: Validation failed for %s\n%s", pendingPath, formatValidationIssues(issues));
+      const repairPrompt =
+        `The evaluation file at \`${pendingPath}\` failed validation. ` +
+        `Please fix all issues below:\n\n\`\`\`\n${formatValidationIssues(issues)}\n\`\`\``;
+      await runAgent({
+        prompt: repairPrompt,
+        config,
+        cwd: config.target,
+        maxTurns: 10,
+      });
+      issues = validateStage5File(pendingPath);
+      if (issues.length > 0) {
+        logger.warning("Stage 5: Repair failed for %s\n%s", pendingPath, formatValidationIssues(issues));
+      }
+    }
   }
 
-  checkpoint.markComplete(TASK_KEY);
-  logger.info("Stage 5 complete. Report: %s", reportPath);
-  logger.info("Report summary: total=%s severities=%j", summary.totalFindings, summary.severityCounts);
-  return reportPath;
+  checkpoint.markComplete(key);
+  logger.info("Stage 5: %s complete (confirmed=%s)", stage4Filename, confirmed);
+  return confirmed ? pendingPath : null;
+}
+
+async function assignIdsAndFinalize(pendingPaths: string[], config: AuditConfig): Promise<string[]> {
+  const stage5Dir = path.join(config.outputDir, "stage-5-details");
+  const existingFinalFiles = await listExistingFinalFiles(stage5Dir);
+
+  const counters: Record<string, number> = {
+    Critical: 0,
+    High: 0,
+    Medium: 0,
+    Low: 0,
+  };
+
+  for (const filePath of existingFinalFiles) {
+    const existingId = await readExistingId(filePath);
+    if (!existingId) {
+      continue;
+    }
+    const [prefix, numberText] = existingId.split("-");
+    const severity = Object.entries(SEVERITY_PREFIX).find(([, value]) => value === prefix)?.[0];
+    if (!severity) {
+      continue;
+    }
+    const severityKey = severity as Severity;
+    const currentCount = counters[severityKey] ?? 0;
+    counters[severityKey] = Math.max(currentCount, Number(numberText ?? "0"));
+  }
+
+  const findings: Array<{ pendingPath: string; severity: Severity }> = [];
+  for (const pendingPath of pendingPaths) {
+    const severity = await readSeverityFromPending(pendingPath);
+    if (severity && VALID_SEVERITIES.has(severity.toLowerCase())) {
+      const normalizedSeverity = normalizeSeverity(severity);
+      if (normalizedSeverity) {
+        findings.push({ pendingPath, severity: normalizedSeverity });
+      }
+    } else {
+      logger.warning("Stage 5: Skipping %s because severity could not be read.", path.basename(pendingPath));
+    }
+  }
+
+  findings.sort((left, right) => {
+    return SEVERITY_ORDER.indexOf(left.severity) - SEVERITY_ORDER.indexOf(right.severity);
+  });
+
+  const finalized: string[] = [...existingFinalFiles];
+  for (const finding of findings) {
+    const nextCount = (counters[finding.severity] ?? 0) + 1;
+    counters[finding.severity] = nextCount;
+    const realId = `${SEVERITY_PREFIX[finding.severity]}-${String(nextCount).padStart(2, "0")}`;
+    const finalPath = path.join(stage5Dir, `${realId}.md`);
+    await fs.rename(finding.pendingPath, finalPath);
+    await injectIdIntoFile(finalPath, realId);
+    finalized.push(finalPath);
+    logger.info("Stage 5: Assigned %s to %s", realId, path.basename(finding.pendingPath));
+  }
+
+  return finalized.sort(compareSeverityThenId);
+}
+
+export async function runStage5(
+  findingFiles: string[],
+  config: AuditConfig,
+  checkpoint: CheckpointManager,
+): Promise<string[]> {
+  if (findingFiles.length === 0) {
+    logger.info("Stage 5: No findings to evaluate.");
+    return await listExistingFinalFiles(path.join(config.outputDir, "stage-5-details"));
+  }
+
+  const results = await runParallelLimited(findingFiles, config.maxParallel, async (findingFile) => {
+    return await runFinding(findingFile, config, checkpoint);
+  });
+
+  const confirmedPending: string[] = [];
+  results.forEach((result, index) => {
+    const findingFile = findingFiles[index];
+    if (!findingFile) {
+      return;
+    }
+    if (result.status === "rejected") {
+      logger.error("Stage 5: %s failed: %s", path.basename(findingFile), coerceError(result.reason).message);
+      return;
+    }
+    if (result.value) {
+      confirmedPending.push(result.value);
+    }
+  });
+
+  logger.info(
+    "Stage 5: %s confirmed findings (from %s candidates).",
+    confirmedPending.length,
+    findingFiles.length,
+  );
+
+  const finalPaths = await assignIdsAndFinalize(confirmedPending, config);
+  logger.info("Stage 5 complete. Final findings: %s", finalPaths.length);
+  return finalPaths;
 }

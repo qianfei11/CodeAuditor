@@ -6,7 +6,7 @@ You are performing **Stage 2** of an orchestrated network protocol security audi
 
 Analyze the project at **__TARGET_PATH__** and produce a scope document at **__OUTPUT_PATH__**.
 
-- **Research report**: `__RESEARCH_PATH__`
+- **Stage 1 guidance**: `__INSTRUCTION_PATH__`
 - **Initial threat model**: __THREAT_MODEL__
 
 ## User Instructions
@@ -15,15 +15,15 @@ __USER_INSTRUCTIONS__
 
 ## Workflow
 
-### Step 1: Read the Research Report
+### Step 1: Read the Stage 1 Guidance
 
-Read `__RESEARCH_PATH__` completely before doing anything else. Extract:
+Read `__INSTRUCTION_PATH__` completely before doing anything else. Extract:
 
-- **Threat Model Conclusions** — Priority Vulnerability Classes, Out of Scope, Attacker Profile, and High-Risk Modules and Subsystems
-- **Vulnerability Patterns for Follow-On Audit** — recurring weakness types to prioritize
-- Any modules or subsystems explicitly flagged as high-risk
+- **High-Risk Modules to Prioritize** — modules and subsystems with the most CVE history or broadest attack surface
+- **Vulnerability Classes That Drive Module Selection** — bug classes to look for when deciding scope
+- **Attacker Entry Points** — network-facing interfaces and message types the attacker can reach
 
-This report is the primary input for threat model finalization and module scoping. High-Risk Modules listed there should default to `Yes` for Stage 3 analysis unless there is a strong reason to exclude them.
+This guidance is your primary input for threat model finalization and module scoping. High-Risk Modules and Attacker Entry Points listed there should default to `Yes` for Stage 3 analysis unless there is a strong reason to exclude them.
 
 ### Step 2: Understand the Protocol (if needed)
 
@@ -45,7 +45,7 @@ Determine whether the project implements the **client side**, **server side**, o
 
 Combine the following inputs to produce a concise, final threat model statement:
 
-1. The **Threat Model Conclusions** from `__RESEARCH_PATH__` (primary source — historical evidence takes precedence)
+1. The Stage 1 guidance (primary source — historical evidence takes precedence)
 2. The initial threat model provided above
 3. The user instructions
 4. Any project security policy found in the repository
@@ -56,7 +56,7 @@ The final threat model must name: the attacker, their capabilities, the attack s
 
 Identify the project's structure and group related source files into **modules** that implement a cohesive protocol or subsystem. For each module, decide whether it falls within the audit scope and is vulnerability-productive enough for deeper analysis.
 
-Cross-reference the **High-Risk Modules and Subsystems** from the research report — those should default to `Yes` unless there is a strong reason to exclude them.
+Cross-reference the **High-Risk Modules** and **Attacker Entry Points** from the Stage 1 guidance — those should default to `Yes` unless there is a strong reason to exclude them.
 
 **IMPORTANT:** Each module will be processed independently. Ensure modules are self-contained and cohesive.
 
@@ -71,7 +71,7 @@ Write your output to **__OUTPUT_PATH__** using the available file editing tools.
 (project path, name, language, brief description of functionality and protocols, client/server role)
 
 ## Threat Model
-(final threat model, derived from research conclusions + initial threat model + user instructions)
+(final threat model, derived from Stage 1 guidance + initial threat model + user instructions)
 
 ## Module Structure
 
@@ -85,9 +85,9 @@ Write your output to **__OUTPUT_PATH__** using the available file editing tools.
 
 ## Completion Checklist
 
-- [ ] Research report read and Threat Model Conclusions extracted
+- [ ] Stage 1 guidance read (`__INSTRUCTION_PATH__`)
 - [ ] Protocol(s) understood or confirmed well-known
 - [ ] Client/server role identified
-- [ ] Threat model finalized (incorporating research conclusions as primary input)
-- [ ] Modules enumerated with analysis verdicts (high-risk modules from research defaulting to Yes)
+- [ ] Threat model finalized (Stage 1 guidance as primary input)
+- [ ] Modules enumerated with analysis verdicts (high-risk modules and attacker entry points from Stage 1 guidance defaulting to Yes)
 - [ ] Output written to **__OUTPUT_PATH__**

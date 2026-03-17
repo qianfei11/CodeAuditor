@@ -22,7 +22,8 @@ export function validateStage1File(filePath: string): ValidationIssue[] {
 
   for (const sectionName of [
     "Project and Research Scope",
-    "Threat Model Conclusions",
+    "Threat Model Signals",
+    "Recent Vulnerabilities",
     "Vulnerability Patterns for Follow-On Audit",
   ]) {
     const section = findSection(content, sectionName);
@@ -44,14 +45,20 @@ export function validateStage1File(filePath: string): ValidationIssue[] {
     }
   }
 
-  const conclusionsSection = findSection(content, "Threat Model Conclusions");
-  if (conclusionsSection !== null) {
-    for (const subsection of ["Priority Vulnerability Classes", "Out of Scope"]) {
-      if (!conclusionsSection.includes(subsection)) {
+  const threatModelSection = findSection(content, "Threat Model Signals");
+  if (threatModelSection !== null) {
+    for (const subsection of [
+      "Attacker Profile",
+      "Historical Vulnerability Patterns",
+      "Priority Vulnerability Classes",
+      "High-Risk Modules and Subsystems",
+      "Severity Distribution and Calibration",
+    ]) {
+      if (!threatModelSection.includes(subsection)) {
         validationIssues.push({
-          description: `Threat Model Conclusions is missing subsection: "${subsection}"`,
-          expected: `A "### ${subsection}" subsection inside Threat Model Conclusions.`,
-          fix: `Add a "### ${subsection}" subsection to the Threat Model Conclusions section.`,
+          description: `Threat Model Signals is missing subsection: "${subsection}"`,
+          expected: `A "### ${subsection}" subsection inside Threat Model Signals.`,
+          fix: `Add a "### ${subsection}" subsection to the Threat Model Signals section.`,
         });
       }
     }

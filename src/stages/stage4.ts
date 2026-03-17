@@ -1,4 +1,3 @@
-import fs from "node:fs/promises";
 import path from "node:path";
 
 import { runAgent } from "../agents/index.js";
@@ -6,8 +5,7 @@ import { CheckpointManager } from "../checkpoint.js";
 import type { AuditConfig, EntryPoint } from "../config.js";
 import { getLogger } from "../logger.js";
 import { loadPrompt } from "../prompts.js";
-import { REFERENCE_DIR } from "../runtime.js";
-import { coerceError, formatValidationIssues, listMatchingFiles, pathExists, runParallelLimited } from "../utils.js";
+import { coerceError, formatValidationIssues, listMatchingFiles, runParallelLimited } from "../utils.js";
 import { validateStage4File } from "../validation/stage4.js";
 
 const logger = getLogger("stage4");
@@ -16,77 +14,10 @@ function taskKey(entryPoint: EntryPoint): string {
   return `stage4:${entryPoint.moduleId}:${entryPoint.id}`;
 }
 
-async function walkSourceTree(rootDir: string): Promise<Record<string, number>> {
-  const counts = { c_cpp: 0, go: 0, rust: 0, managed: 0 };
-
-  async function walk(currentDir: string): Promise<void> {
-    const entries = await fs.readdir(currentDir, { withFileTypes: true });
-    for (const entry of entries) {
-      const fullPath = path.join(currentDir, entry.name);
-      if (entry.isDirectory()) {
-        if (
-          entry.name.startsWith(".") ||
-          ["vendor", "node_modules", "target", "__pycache__"].includes(entry.name)
-        ) {
-          continue;
-        }
-        await walk(fullPath);
-        continue;
-      }
-
-      const extension = path.extname(entry.name).toLowerCase();
-      if ([".c", ".cpp", ".cc", ".cxx", ".h", ".hpp"].includes(extension)) {
-        counts.c_cpp += 1;
-      } else if (extension === ".go") {
-        counts.go += 1;
-      } else if (extension === ".rs") {
-        counts.rust += 1;
-      } else if ([".py", ".java", ".cs", ".rb", ".php"].includes(extension)) {
-        counts.managed += 1;
-      }
-    }
-  }
-
-  await walk(rootDir);
-  return counts;
-}
-
-async function detectChecklist(config: AuditConfig): Promise<string> {
-  const counts = await walkSourceTree(config.target);
-  const dominant = Object.entries(counts).sort((left, right) => right[1] - left[1])[0]?.[0] ?? "c_cpp";
-  const checklistMap: Record<string, string> = {
-    c_cpp: "checklist-c-cpp.md",
-    go: "checklist-go.md",
-    rust: "checklist-rust.md",
-    managed: "checklist-managed.md",
-  };
-
-  const preferred = path.join(REFERENCE_DIR, checklistMap[dominant] ?? "checklist-c-cpp.md");
-  if (await pathExists(preferred)) {
-    return preferred;
-  }
-
-  for (const name of [
-    "checklist-c-cpp.md",
-    "checklist-go.md",
-    "checklist-rust.md",
-    "checklist-managed.md",
-  ]) {
-    const candidate = path.join(REFERENCE_DIR, name);
-    if (await pathExists(candidate)) {
-      return candidate;
-    }
-  }
-
-  return "";
-}
-
 async function runEntryPoint(
   entryPoint: EntryPoint,
   config: AuditConfig,
   checkpoint: CheckpointManager,
-  stage2Output: string,
-  checklistPath: string,
 ): Promise<string[]> {
   const key = taskKey(entryPoint);
   const resultDir = path.join(config.outputDir, "stage-4-details");
@@ -99,7 +30,6 @@ async function runEntryPoint(
   }
 
   const prompt = await loadPrompt("stage4.md", {
-    stage2_output_path: stage2Output,
     ep_block: entryPoint.rawBlock,
     module_id: entryPoint.moduleId,
     ep_id: entryPoint.id,
@@ -110,7 +40,6 @@ async function runEntryPoint(
     analysis_hints: entryPoint.analysisHints,
     result_dir: resultDir,
     finding_prefix: findingPrefix,
-    checklist_path: checklistPath,
     target_path: config.target,
   });
 
@@ -155,14 +84,6 @@ export async function runStage4(
   config: AuditConfig,
   checkpoint: CheckpointManager,
 ): Promise<string[]> {
-  const stage2Output = path.join(config.outputDir, "stage-2-scope.md");
-  const checklistPath = await detectChecklist(config);
-  if (checklistPath) {
-    logger.info("Stage 4: Using checklist: %s", checklistPath);
-  } else {
-    logger.warning("Stage 4: No checklist found, agents will proceed without one.");
-  }
-
   const allEntryPoints = Object.values(entryPointMap).flat();
   if (allEntryPoints.length === 0) {
     logger.warning("Stage 4: No entry points to analyze.");
@@ -170,7 +91,7 @@ export async function runStage4(
   }
 
   const results = await runParallelLimited(allEntryPoints, config.maxParallel, async (entryPoint) => {
-    return await runEntryPoint(entryPoint, config, checkpoint, stage2Output, checklistPath);
+    return await runEntryPoint(entryPoint, config, checkpoint);
   });
 
   const allFindingFiles: string[] = [];

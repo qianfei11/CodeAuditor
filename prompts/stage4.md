@@ -7,10 +7,8 @@ You are performing **Stage 4** of an orchestrated network protocol security audi
 Perform deep security analysis of **one specific entry point** (`__EP_ID__` in module `__MODULE_ID__`).
 
 - **Target project**: `__TARGET_PATH__`
-- **Stage 2 scope**: `__STAGE2_OUTPUT_PATH__`
 - **Result directory**: `__RESULT_DIR__`
 - **Finding file prefix**: `__FINDING_PREFIX__` (e.g., files will be named `__FINDING_PREFIX__-F-01.md`, `__FINDING_PREFIX__-F-02.md`, etc.)
-- **Security checklist**: `__CHECKLIST_PATH__`
 
 ## Entry Point to Analyze
 
@@ -30,31 +28,23 @@ Use **data-flow-driven analysis**: starting from the entry point function, trace
 
 ## Workflow
 
-### Step 1: Read Stage 2 Scope
+### Step 1: Analyze the Entry Point
 
-Read `__STAGE2_OUTPUT_PATH__` for the project threat model. Let the threat model guide your analysis priorities.
+The entry point block above contains your threat model context: the attacker profile, priority vulnerability classes, and concrete data-flow paths to trace. Use it to guide your analysis priorities.
 
-### Step 2: Read the Security Checklist
+Read the relevant source files (use `__TARGET_PATH__` as the project root). Trace attacker-controlled data through all code paths.
 
-Read `__CHECKLIST_PATH__` for a comprehensive list of vulnerability classes relevant to this project's language. Use it as your analysis guide — work through the checklist categories systematically.
+**Before writing any finding, perform a static verification pass:** confirm that the vulnerable code path is actually reachable from attacker-controlled input and that no mitigating condition makes exploitation impossible. Only report a finding if you are confident it is not a false positive. A smaller set of high-confidence findings is more valuable than a large set that includes speculative ones.
 
-### Step 3: Analyze the Entry Point
+For each confirmed security issue, write a separate finding file. **Each file contains exactly one finding.**
 
-Perform in-depth analysis of the entry point defined above. Read the relevant source files (use `__TARGET_PATH__` as the project root). Trace attacker-controlled data through all code paths.
-
-For each security issue found, write a separate finding file. **Each file contains exactly one finding.**
-
-### Step 4: Write Finding Files
+### Step 2: Write Finding Files
 
 For each confirmed finding, write one file to `__RESULT_DIR__/` named `__FINDING_PREFIX__-F-{NN}.md` (where `{NN}` is a zero-padded two-digit number: F-01, F-02, etc.).
 
 **Each finding file must have this exact format:**
 
 ```markdown
-<!-- Source context: Module __MODULE_ID__, Entry Point __EP_ID__ (__EP_TYPE__) -->
-<!-- Location: __LOCATION__ -->
-<!-- Target: __TARGET_PATH__ -->
-
 ### F-{NN}: {Short Title}
 - **Location**: `{file}:{function}` (lines {X}-{Y})
 - **Vulnerability class**: {class}
@@ -67,19 +57,25 @@ For each confirmed finding, write one file to `__RESULT_DIR__/` named `__FINDING
 - **Reachability notes**: {how an attacker reaches this, prerequisites}
 ```
 
+**Self-containment requirement.** The finding file is the sole input a Stage 5 sub-agent receives before verifying the vulnerability. It must contain enough context for independent verification without loading any other pipeline document. Concretely:
+- **Location** must include the exact file path, function name, and line numbers so the verifier can navigate directly to the code.
+- **Root cause** must describe the specific flaw precisely enough that a reader who has not traced the data flow can understand what is wrong.
+- **Key code snippet** must include the vulnerable lines with inline annotations marking where attacker-controlled data enters, what unsafe operation occurs, and what the impact is.
+- **Reachability notes** must state the exact call path from the network input to this code, any preconditions (authentication state, configuration flags, message sequence), and what an attacker must send to trigger it.
+
 **Format rules (strictly enforced by the built-in validator):**
 1. Heading must be `### F-{NN}:` followed by a space and the title.
 2. Required fields (each on its own `- **{name}**:` line): `Location`, `Vulnerability class`, `Root cause`, `Preliminary severity`.
 3. Severity must be exactly one of: `Critical`, `High`, `Medium`, `Low`.
-4. Nothing outside the source context comment and finding block — no intro paragraphs, extra headings, or closing remarks.
+4. Nothing outside the finding block — no intro paragraphs, extra headings, or closing remarks.
 
 **If no findings for this entry point:** write no files. It is valid to produce zero finding files.
 
 ## Completion Checklist
 
-- [ ] Threat model read from Stage 2 output
-- [ ] Security checklist reviewed
+- [ ] Entry point threat context and analysis hints used to guide priorities
 - [ ] Entry point source code read and analyzed
 - [ ] All attacker-controlled data paths traced to dangerous sinks
+- [ ] Each candidate finding statically verified as reachable and non-speculative before writing
 - [ ] One finding file written per confirmed security issue (or zero files if no findings)
-- [ ] Each file passes the Stage 4 validator's format requirements
+- [ ] Each file is self-contained and passes the Stage 4 validator's format requirements

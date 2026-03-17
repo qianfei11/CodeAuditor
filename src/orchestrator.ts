@@ -27,17 +27,21 @@ export async function runAudit(config: AuditConfig): Promise<string> {
     await runSetup(config);
   }
 
-  let researchPath: string;
+  let instructionStage2Path: string;
+  let instructionStage5Path: string;
   if (!config.skipStages.includes(1)) {
-    researchPath = await runStage1(config, checkpoint);
+    const stage1 = await runStage1(config, checkpoint);
+    instructionStage2Path = stage1.instructionStage2Path;
+    instructionStage5Path = stage1.instructionStage5Path;
   } else {
     logger.info("Stage 1 skipped.");
-    researchPath = path.join(config.outputDir, "stage-1-research.md");
+    instructionStage2Path = path.join(config.outputDir, "stage-1-details", "instruction-stage2.md");
+    instructionStage5Path = path.join(config.outputDir, "stage-1-details", "instruction-stage5.md");
   }
 
   let modules: Module[] = [];
   if (!config.skipStages.includes(2)) {
-    modules = await runStage2(config, checkpoint, researchPath);
+    modules = await runStage2(config, checkpoint, instructionStage2Path);
   } else {
     logger.info("Stage 2 skipped.");
     modules = getInScopeModules(path.join(config.outputDir, "stage-2-scope.md"));
@@ -68,7 +72,7 @@ export async function runAudit(config: AuditConfig): Promise<string> {
   }
 
   if (!config.skipStages.includes(5)) {
-    await runStage5(findingFiles, config, checkpoint);
+    await runStage5(findingFiles, config, checkpoint, instructionStage5Path);
   } else {
     logger.info("Stage 5 skipped.");
   }

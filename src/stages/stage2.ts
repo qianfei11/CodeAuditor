@@ -14,7 +14,7 @@ const TASK_KEY = "stage2";
 export async function runStage2(
   config: AuditConfig,
   checkpoint: CheckpointManager,
-  researchPath: string,
+  instructionPath: string,
 ): Promise<Module[]> {
   const outputPath = path.join(config.outputDir, "stage-2-scope.md");
 
@@ -26,7 +26,7 @@ export async function runStage2(
   const prompt = await loadPrompt("stage2.md", {
     target_path: config.target,
     output_path: outputPath,
-    research_path: researchPath,
+    instruction_path: instructionPath,
     threat_model: config.threatModel,
     user_instructions: config.scope || "No additional scope constraints.",
   });

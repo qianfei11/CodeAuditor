@@ -5,7 +5,7 @@ import { Codex } from "@openai/codex-sdk";
 
 import type { AuditConfig, ValidationIssue } from "../config.js";
 import { getLogger } from "../logger.js";
-import { REFERENCE_DIR } from "../runtime.js";
+
 import { runCommand } from "../utils.js";
 
 const logger = getLogger("agents");
@@ -30,7 +30,7 @@ function findExecutable(name: string): string | null {
 
 function additionalDirectories(config: AuditConfig, cwd: string): string[] {
   const resolvedCwd = path.resolve(cwd);
-  return [config.outputDir, REFERENCE_DIR]
+  return [config.outputDir]
     .map((candidate) => path.resolve(candidate))
     .filter((candidate, index, values) => {
       return (

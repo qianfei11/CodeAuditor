@@ -93,6 +93,7 @@ async function runFinding(
   stage4FilePath: string,
   config: AuditConfig,
   checkpoint: CheckpointManager,
+  instructionPath: string,
 ): Promise<string | null> {
   const stage4Filename = path.basename(stage4FilePath);
   const key = taskKey(stage4Filename);
@@ -107,6 +108,7 @@ async function runFinding(
   const prompt = await loadPrompt("stage5.md", {
     finding_file_path: stage4FilePath,
     output_path: pendingPath,
+    instruction_path: instructionPath,
   });
 
   await runAgent({
@@ -203,6 +205,7 @@ export async function runStage5(
   findingFiles: string[],
   config: AuditConfig,
   checkpoint: CheckpointManager,
+  instructionPath: string,
 ): Promise<string[]> {
   if (findingFiles.length === 0) {
     logger.info("Stage 5: No findings to evaluate.");
@@ -210,7 +213,7 @@ export async function runStage5(
   }
 
   const results = await runParallelLimited(findingFiles, config.maxParallel, async (findingFile) => {
-    return await runFinding(findingFile, config, checkpoint);
+    return await runFinding(findingFile, config, checkpoint, instructionPath);
   });
 
   const confirmedPending: string[] = [];

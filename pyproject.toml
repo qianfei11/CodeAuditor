@@ -3,7 +3,7 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "protocol-auditor"
+name = "code-auditor"
 version = "0.1.0"
 description = "Multi-stage code auditing agent application using Claude Code SDK"
 requires-python = ">=3.12"
@@ -12,7 +12,7 @@ dependencies = [
 ]
 
 [project.scripts]
-protocol-auditor = "protocol_auditor.__main__:main"
+code-auditor = "code_auditor.__main__:main"
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"

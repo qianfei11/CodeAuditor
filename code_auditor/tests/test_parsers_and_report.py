@@ -4,10 +4,10 @@ import json
 import os
 import tempfile
 
-from protocol_auditor.parsing.stage2 import parse_au_file
-from protocol_auditor.report.generate import generate_report
-from protocol_auditor.validation.stage2 import validate_stage2_file
-from protocol_auditor.validation.stage5 import validate_stage5_file
+from code_auditor.parsing.stage2 import parse_au_file
+from code_auditor.report.generate import generate_report
+from code_auditor.validation.stage2 import validate_stage2_file
+from code_auditor.validation.stage5 import validate_stage5_file
 
 
 def test_stage2_parser_reads_single_au_file():

@@ -1,4 +1,4 @@
-# ProtocolAuditor
+# CodeAuditor
 
 Multi-stage code auditing agent using `claude-code-sdk` (Python). Given a target project, it decomposes the codebase into modules → analysis units → findings → vulnerabilities → final report.
 
@@ -6,7 +6,7 @@ Multi-stage code auditing agent using `claude-code-sdk` (Python). Given a target
 
 - **Language**: Python 3.14
 - **Package manager**: pip (uses `pyproject.toml`, hatchling backend)
-- **Entry point**: `protocol-auditor` CLI → `protocol_auditor/__main__.py:main`
+- **Entry point**: `code-auditor` CLI → `code_auditor/__main__.py:main`
 - **Agent backend**: `claude-code-sdk` async `query()` API
 
 ## Running
@@ -16,7 +16,7 @@ Multi-stage code auditing agent using `claude-code-sdk` (Python). Given a target
 pip install -e .
 
 # Run an audit
-protocol-auditor --target /path/to/project [--output-dir DIR] [--max-parallel 4] [--resume] [--skip-stages 0,4] [--log-level DEBUG]
+code-auditor --target /path/to/project [--output-dir DIR] [--max-parallel 4] [--resume] [--skip-stages 0,4] [--log-level DEBUG]
 
 # Required args
 #   --target        Root directory of project to audit
@@ -34,16 +34,16 @@ protocol-auditor --target /path/to/project [--output-dir DIR] [--max-parallel 4]
 
 ```bash
 pytest                                    # run all tests
-pytest protocol_auditor/tests/            # same thing
+pytest code_auditor/tests/            # same thing
 pytest -k test_stage1                     # filter by name
 ```
 
-Tests are in `protocol_auditor/tests/test_parsers_and_report.py`. They cover parsers, validators, and report generation — no agent calls needed.
+Tests are in `code_auditor/tests/test_parsers_and_report.py`. They cover parsers, validators, and report generation — no agent calls needed.
 
 ## Project layout
 
 ```
-protocol_auditor/
+code_auditor/
 ├── __main__.py          # CLI (argparse) → asyncio.run(run_audit)
 ├── config.py            # AuditConfig dataclass
 ├── orchestrator.py      # Sequential stage runner

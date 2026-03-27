@@ -24,7 +24,7 @@ def _parse_skip_stages(raw: str | None) -> list[int]:
 
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        prog="protocol-auditor",
+        prog="code-auditor",
         description="Multi-stage code auditing agent application",
     )
     parser.add_argument("--target", required=True, help="Root directory of the project to audit")

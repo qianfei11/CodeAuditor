@@ -26,3 +26,4 @@ audit-output/
 .pytest_cache/
 
 bak/
+working/

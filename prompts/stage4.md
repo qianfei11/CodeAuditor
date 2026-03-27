@@ -1,81 +1,129 @@
-# Stage 4: Vulnerability Analysis — Single Entry Point
+# Stage 4: Security Context Research
 
-You are performing **Stage 4** of an orchestrated network protocol security audit. Write your findings to disk; do not print them in your response.
+You are performing **Stage 4** of an orchestrated software security audit. Write your output to disk; do not print it in your response.
 
 ## Your Task
 
-Perform deep security analysis of **one specific entry point** (`__EP_ID__` in module `__MODULE_ID__`).
+Research the project at **__TARGET_PATH__** and produce two documents:
+1. A security context report summarizing the project's security posture, history, and threat landscape (for human review).
+2. Distilled evaluation guidance for Stage 5 sub-agents who must decide which Stage 3 bugs are true security vulnerabilities and how severe they are.
 
-- **Target project**: `__TARGET_PATH__`
-- **Result directory**: `__RESULT_DIR__`
-- **Finding file prefix**: `__FINDING_PREFIX__` (e.g., files will be named `__FINDING_PREFIX__-F-01.md`, `__FINDING_PREFIX__-F-02.md`, etc.)
+- **Output file (security context)**: `__OUTPUT_PATH__`
+- **Output file (Stage 5 evaluation guidance)**: `__INSTRUCTION_STAGE5_PATH__`
+- **Today's date**: __TODAY__
+- **Search window**: __START_DATE__ to __TODAY__ (recent 5 years)
 
-## Entry Point to Analyze
+## User Instructions
 
-```
-__EP_BLOCK__
-```
-
-## Core Methodology
-
-Use **data-flow-driven analysis**: starting from the entry point function, trace how attacker-controlled values propagate through local variables, struct fields, function arguments, loop bounds, buffer offsets, allocation sizes, and into dangerous sinks (memory operations, system calls, response construction, state updates).
-
-### Type-Specific Strategy
-
-- **Type P (Parser)**: Prioritize memory safety — buffer overflows, OOB access, integer overflows in length/offset calculations, malformed input handling, truncation errors.
-- **Type H (Handler)**: Prioritize logic and validation — improper field validation, injection into response construction, incorrect error handling, resource allocation from attacker-controlled values, access control.
-- **Type S (Session)**: Prioritize protocol correctness — state machine transitions, auth bypass via state confusion, session fixation, incomplete cleanup, cross-handler race conditions.
+__USER_INSTRUCTIONS__
 
 ## Workflow
 
-### Step 1: Analyze the Entry Point
+### Step 1: Understand the Project
 
-The entry point block above contains your threat model context: the attacker profile, priority vulnerability classes, and concrete data-flow paths to trace. Use it to guide your analysis priorities.
+Read the project's documentation and key source files:
+- `README*`, `SECURITY*`, `CHANGELOG*`, release notes
+- Build files (`Makefile`, `CMakeLists.txt`, `go.mod`, `Cargo.toml`, `package.json`, etc.)
+- Top-level entry points and architecture
 
-Read the relevant source files (use `__TARGET_PATH__` as the project root). Trace attacker-controlled data through all code paths.
+Determine:
+- What the project does (protocol implementation, library, daemon, etc.)
+- What language(s) it uses
+- How it is deployed (standalone binary, library linked into other programs, network service, etc.)
+- What attack surface it exposes (network listeners, file parsers, IPC, etc.)
 
-**Before writing any finding, perform a static verification pass:** confirm that the vulnerable code path is actually reachable from attacker-controlled input and that no mitigating condition makes exploitation impossible. Only report a finding if you are confident it is not a false positive. A smaller set of high-confidence findings is more valuable than a large set that includes speculative ones.
+### Step 2: Research Security History
 
-For each confirmed security issue, write a separate finding file. **Each file contains exactly one finding.**
+Search for security-relevant information using a tiered approach:
 
-### Step 2: Write Finding Files
+1. **Project security policy**: Read `SECURITY.md` (or equivalent) to find the project's vulnerability disclosure process and, critically, any links to a **security announcements page** on the project's official website.
 
-For each confirmed finding, write one file to `__RESULT_DIR__/` named `__FINDING_PREFIX__-F-{NN}.md` (where `{NN}` is a zero-padded two-digit number: F-01, F-02, etc.).
+2. **Official security announcements**: If the project has a security advisory page (e.g., on its website, GitHub Security Advisories, or a dedicated mailing list mentioned in `SECURITY.md`), visit it and collect all CVEs and security fixes published in the window __START_DATE__ – __TODAY__.
 
-**Each finding file must have this exact format:**
+3. **Git history**: Search commits for keywords: "CVE", "security", "fix", "vulnerability", "overflow", "injection", "bypass", "DOS", "crash", "patch" in the date range __START_DATE__ to __TODAY__. Pay attention to commits that fix bugs without explicitly using security language — these often indicate silently-patched vulnerabilities.
+
+4. **Internet search (if needed)**: If the steps above yield few or no findings, search the internet for CVEs, security advisories, and vulnerability reports associated with this project. Check NVD, GitHub Advisory Database, and project-specific trackers.
+
+For each finding, record: CVE ID (if any), affected component/function, vulnerability class, severity, and a one-line summary.
+
+### Step 3: Identify Attacker Profile
+
+Based on the project's purpose and deployment model, define the attacker:
+- **Network attacker**: Can send arbitrary packets/messages to the service
+- **Authenticated attacker**: Has valid credentials but attempts privilege escalation
+- **Local attacker**: Has local access to the system running the software
+- **Supply-chain attacker**: Targets the build/distribution process
+
+Most network protocol implementations face a **network attacker** who can send malformed or malicious protocol messages.
+
+### Step 4: Write Security Context Report
+
+Write to **__OUTPUT_PATH__**. This document is for human review — it should be clear, well-organized, and useful as a standalone reference on this project's security landscape.
+
+Use this structure:
 
 ```markdown
-### F-{NN}: {Short Title}
-- **Location**: `{file}:{function}` (lines {X}-{Y})
-- **Vulnerability class**: {class}
-- **Root cause**: {description in 1-3 sentences}
-- **Preliminary severity**: {Critical|High|Medium|Low}
-- **Key code snippet**:
-```{lang}
-{5-30 lines of annotated code showing the vulnerability}
+# Security Context
+
+## Project Summary
+
+- **Project**: {name}
+- **Path**: __TARGET_PATH__
+- **Language**: {primary language}
+- **Description**: {2-4 sentences describing what the project does}
+- **Deployment model**: {how the software is typically deployed}
+
+## Attacker Profile
+
+{Description of the primary attacker: capabilities, network position, goals. Note any secondary attacker models if relevant.}
+
+## Attack Surface
+
+{Enumerated list of attack surfaces: network listeners, protocol parsers, file handlers, IPC, crypto operations, etc. For each, briefly note what input it accepts and from whom.}
+
+## Known Vulnerabilities and Security History
+
+{Chronological list of CVEs, security advisories, and notable security-related commits found in Step 2. For each entry include: CVE ID (if any), date, affected component, vulnerability class, severity, and one-line description. If no findings, state that explicitly and note which sources were checked.}
+
+## Vulnerability Patterns
+
+{Analysis of recurring vulnerability patterns observed in the security history. What classes of bugs have historically been exploitable in this project? Which components are repeat offenders? What does this tell us about where new vulnerabilities are most likely to appear?}
+
+## High-Value Vulnerability Classes
+
+{Ranked list of the most impactful vulnerability types for this specific project, informed by its language, architecture, deployment model, and security history. For each, explain why it matters for this project:
+1. {class} — {why it matters, what impact it enables}
+2. {class} — {why, impact}
+...}
 ```
-- **Reachability notes**: {how an attacker reaches this, prerequisites}
-```
 
-**Self-containment requirement.** The finding file is the sole input a Stage 5 sub-agent receives before verifying the vulnerability. It must contain enough context for independent verification without loading any other pipeline document. Concretely:
-- **Location** must include the exact file path, function name, and line numbers so the verifier can navigate directly to the code.
-- **Root cause** must describe the specific flaw precisely enough that a reader who has not traced the data flow can understand what is wrong.
-- **Key code snippet** must include the vulnerable lines with inline annotations marking where attacker-controlled data enters, what unsafe operation occurs, and what the impact is.
-- **Reachability notes** must state the exact call path from the network input to this code, any preconditions (authentication state, configuration flags, message sequence), and what an attacker must send to trigger it.
+### Step 5: Write Stage 5 Evaluation Guidance
 
-**Format rules (strictly enforced by the built-in validator):**
-1. Heading must be `### F-{NN}:` followed by a space and the title.
-2. Required fields (each on its own `- **{name}**:` line): `Location`, `Vulnerability class`, `Root cause`, `Preliminary severity`.
-3. Severity must be exactly one of: `Critical`, `High`, `Medium`, `Low`.
-4. Nothing outside the finding block — no intro paragraphs, extra headings, or closing remarks.
+Write distilled guidance to **__INSTRUCTION_STAGE5_PATH__**. Stage 5 sub-agents will read this file when evaluating individual bug reports from Stage 3. Each sub-agent must answer two questions: (1) Is this bug a security vulnerability? (2) If yes, how severe is it?
 
-**If no findings for this entry point:** write no files. It is valid to produce zero finding files.
+The guidance must help with **both** questions — distinguishing bugs from vulnerabilities is at least as important as severity scoring.
+
+Include the following sections:
+
+**Bug vs. Vulnerability Criteria** — Help the sub-agent decide whether a given bug crosses the line into a security vulnerability:
+- What is the attacker profile? (from Step 3) What can the attacker control?
+- A bug is a vulnerability only if an attacker can **reach** it through an attack surface and **exploit** it to violate a security property (confidentiality, integrity, availability, authentication, authorization).
+- Reference the historical vulnerability list from Step 4: use past CVEs as concrete examples of what this project considers a security vulnerability. What bug classes have been assigned CVEs before? What components have had confirmed vulnerabilities? This calibrates the bar — if a similar bug in the same component was a CVE in the past, a new instance is likely a vulnerability too.
+- Common reasons a bug is NOT a vulnerability: the code path is unreachable from attacker input; the bug is in dead/test/debug code; the impact is purely a logic error with no security consequence; existing mitigations (bounds checks, sandboxing, privilege separation) prevent exploitation.
+- Project-specific guidance: based on this project's architecture and deployment, which kinds of bugs are most likely to be exploitable vs. benign?
+
+**Severity Assessment** — Once a bug is confirmed as a vulnerability, guide severity scoring:
+- The attacker profile and what they can achieve
+- Historical severity benchmarks (what CVSS ranges have past CVEs for this project received?)
+- Project-specific modifiers (e.g., "runs as root so crashes are High", "sandboxed by default so RCE is contained", "handles untrusted network input so parser bugs are directly reachable")
+- The ranked vulnerability classes from Step 4
+- Non-default configuration or compile-flag gating: if the vulnerable code path requires non-default settings, cap severity at Medium
 
 ## Completion Checklist
 
-- [ ] Entry point threat context and analysis hints used to guide priorities
-- [ ] Entry point source code read and analyzed
-- [ ] All attacker-controlled data paths traced to dangerous sinks
-- [ ] Each candidate finding statically verified as reachable and non-speculative before writing
-- [ ] One finding file written per confirmed security issue (or zero files if no findings)
-- [ ] Each file is self-contained and passes the Stage 4 validator's format requirements
+- [ ] Project documentation and source code surveyed
+- [ ] Security announcements page visited (if available)
+- [ ] Security history researched (git log, CVEs, advisories, internet search if needed)
+- [ ] Attacker profile defined
+- [ ] Security context report written to `__OUTPUT_PATH__` with all required sections
+- [ ] Stage 5 evaluation guidance written to `__INSTRUCTION_STAGE5_PATH__` with both bug-vs-vulnerability criteria and severity assessment guidance

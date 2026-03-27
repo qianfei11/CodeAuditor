@@ -1,20 +1,20 @@
 # Stage 5: Vulnerability Evaluation
 
-You are performing **Stage 5** of an orchestrated network protocol security audit. Write your result to disk; do not print it in your response.
+You are performing **Stage 5** of an orchestrated software security audit. Write your result to disk; do not print it in your response.
 
 ## Your Task
 
-Evaluate one vulnerability finding from Stage 4.
+Evaluate one vulnerability finding from Stage 3.
 
 - **Finding file**: `__FINDING_FILE_PATH__`
 - **Output file**: `__OUTPUT_PATH__` (write here ONLY if the vulnerability is confirmed and severity ≥ Medium)
-- **Severity evaluation guidance**: `__INSTRUCTION_PATH__`
+- **Evaluation guidance** (bug vs. vulnerability criteria + severity assessment): `__INSTRUCTION_PATH__`
 
 ## Workflow
 
 ### Step 1: Read the Finding File
 
-Read `__FINDING_FILE_PATH__`. It contains one vulnerability finding with location, vulnerability class, root cause, preliminary severity, a code snippet, and reachability notes. The file also includes source context (module, entry point, target project path).
+Read `__FINDING_FILE_PATH__` (JSON). It contains one vulnerability finding with location, vulnerability class, root cause, preliminary severity, a code snippet, and reachability notes.
 
 ### Step 2: Verify Existence (False-Positive Check)
 
@@ -33,11 +33,11 @@ Before scoring severity, determine the exact conditions required to trigger the 
 - **Runtime configuration**: Does triggering the vulnerability require a non-default configuration option that is unlikely to be enabled in real-world deployments?
 - **Environment assumptions**: Does exploitation depend on an atypical deployment topology, hardware, or operating mode?
 
-If the vulnerability requires a non-default compile flag or non-default runtime configuration that is uncommon in real-world deployments, cap its severity at **Medium** regardless of the theoretical impact. Document this constraint explicitly in the Pre-requisites field. The rationale: a vulnerability that most installations never expose is structurally less severe than one present in all default builds.
+If the vulnerability requires a non-default compile flag or non-default runtime configuration that is uncommon in real-world deployments, cap its severity at **Medium** regardless of the theoretical impact. Document this constraint explicitly in the prerequisites field. The rationale: a vulnerability that most installations never expose is structurally less severe than one present in all default builds.
 
 ### Step 4: Assess Impact and Severity
 
-Read `__INSTRUCTION_PATH__` for project-specific severity context: the attacker profile, historical severity benchmarks for this project/protocol, the highest-impact vulnerability classes, and deployment-specific modifiers that raise or lower scores.
+Read `__INSTRUCTION_PATH__` for project-specific evaluation context: the bug-vs-vulnerability criteria, attacker profile, historical severity benchmarks, and deployment-specific modifiers.
 
 Using this context together with your pre-requisite assessment, analyze the security impact:
 - Determine what an attacker can achieve (RCE, DoS, info-leak, auth bypass, etc.)
@@ -53,46 +53,33 @@ Using this context together with your pre-requisite assessment, analyze the secu
 
 ### Step 5: Write Evaluation Result
 
-Write your evaluation to `__OUTPUT_PATH__`. Use **exactly** this format:
-
-```markdown
-### Summary JSON Line
+Write your evaluation to `__OUTPUT_PATH__` as a single JSON object:
 
 ```json
 {
   "id": "TBD",
-  "title": "...",
+  "title": "short summary",
   "location": "file:function (lines X-Y)",
   "cwe_id": ["CWE-XXX"],
   "vulnerability_class": ["class1", "class2"],
   "cvss_score": "X.X",
-  "severity": "Critical|High|Medium|Low"
+  "severity": "Critical|High|Medium|Low",
+  "prerequisites": "specific compile flags, runtime configuration options, or deployment conditions required; note if non-default",
+  "impact": "describe the output of triggering this vulnerability, how the security boundary is voilated",
+  "code_snippet": "paste the relevant lines with inline comments explaining the root cause and trigger path"
 }
 ```
 
-### Detail
+**IMPORTANT**: The `"id"` field must be `"TBD"`. The orchestrator will assign the real ID after all evaluations complete.
 
-- **ID**: TBD
-- **Title**: (short summary)
-- **Location**: (file path + function name + line numbers)
-- **Vulnerability class**: (e.g., "integer overflow leading to heap buffer overflow")
-- **CWE ID**: (e.g., CWE-122, CWE-190)
-- **Pre-requisites**: (specific compile flags, runtime configuration options, or deployment conditions required to reach this code path; note if non-default)
-- **Impact**: (RCE / DoS / info-leak / auth bypass / etc.)
-- **Severity**: (Critical / High / Medium / Low — must match JSON severity)
-- **Code snippet**: (paste the relevant lines with inline comments explaining the root cause and trigger path)
-```
-
-**IMPORTANT**: The `"id"` in the JSON and the `**ID**` in the Detail section must both be `TBD`. The orchestrator will assign the real ID after all evaluations complete.
-
-**IMPORTANT**: The output file MUST be parseable by the built-in Stage 5 validator. The JSON must be valid (no trailing commas, properly quoted strings).
+**IMPORTANT**: The output file MUST be valid JSON (no trailing commas, no comments, properly quoted strings).
 
 ## Completion Checklist
 
 - [ ] Finding file read and source code verified
 - [ ] False-positive check performed
 - [ ] Pre-requisites assessed (compile flags, runtime config, deployment assumptions)
-- [ ] Severity evaluation guidance read (`__INSTRUCTION_PATH__`)
+- [ ] Evaluation guidance read (`__INSTRUCTION_PATH__`)
 - [ ] Non-default-config cap applied if applicable
-- [ ] If confirmed and severity ≥ Medium: output written to `__OUTPUT_PATH__`
+- [ ] If confirmed and severity ≥ Medium: output written to `__OUTPUT_PATH__` as valid JSON
 - [ ] If false positive or < Medium: no output file written

@@ -1,5 +1,10 @@
-# Build output
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
 dist/
+build/
+*.egg
 
 # Local environments
 .venv/
@@ -17,6 +22,7 @@ audit-output/
 .idea/
 .vscode/
 
-# Node
-node_modules/
-npm-debug.log*
+# Pytest
+.pytest_cache/
+
+bak/

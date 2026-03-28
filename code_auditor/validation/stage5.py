@@ -5,8 +5,7 @@ import json
 from ..config import ValidationIssue
 from .common import read_file_or_issues
 
-_REQUIRED_KEYS = ["id", "title", "location", "cwe_id", "vulnerability_class", "cvss_score", "severity"]
-_VALID_SEVERITIES = {"critical", "high", "medium", "low"}
+_REQUIRED_KEYS = ["id", "title", "location", "cwe_id", "vulnerability_class", "cvss_score"]
 
 
 def validate_stage5_file(file_path: str) -> list[ValidationIssue]:
@@ -40,12 +39,21 @@ def validate_stage5_file(file_path: str) -> list[ValidationIssue]:
                 fix=f'Add "{key}" to the JSON object.',
             ))
 
-    severity = data.get("severity", "")
-    if isinstance(severity, str) and severity and severity.lower() not in _VALID_SEVERITIES:
-        validation_issues.append(ValidationIssue(
-            description=f'Invalid severity: "{severity}".',
-            expected="One of: Critical, High, Medium, Low.",
-            fix='Change "severity" to one of: "Critical", "High", "Medium", "Low".',
-        ))
+    cvss_raw = data.get("cvss_score")
+    if cvss_raw is not None:
+        try:
+            cvss = float(cvss_raw)
+            if not (0.0 <= cvss <= 10.0):
+                validation_issues.append(ValidationIssue(
+                    description=f'CVSS score out of range: {cvss}.',
+                    expected="A number between 0.0 and 10.0.",
+                    fix='Set "cvss_score" to a value between 0.0 and 10.0.',
+                ))
+        except (TypeError, ValueError):
+            validation_issues.append(ValidationIssue(
+                description=f'Invalid cvss_score: "{cvss_raw}".',
+                expected="A numeric CVSS v3.1 base score (e.g. \"7.5\").",
+                fix='Set "cvss_score" to a numeric string like "7.5".',
+            ))
 
     return validation_issues

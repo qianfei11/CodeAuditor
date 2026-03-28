@@ -21,22 +21,34 @@ logger = get_logger("stage5")
 
 _SEVERITY_ORDER = ["Critical", "High", "Medium", "Low"]
 _SEVERITY_PREFIX = {"Critical": "C", "High": "H", "Medium": "M", "Low": "L"}
-_VALID_SEVERITIES = {"critical", "high", "medium", "low"}
 
 
 def _task_key(stage3_filename: str) -> str:
     return f"stage5:{stage3_filename}"
 
 
+def _cvss_to_severity(cvss: float) -> str | None:
+    """Derive severity from CVSS v3.1 base score."""
+    if cvss >= 9.0:
+        return "Critical"
+    if cvss >= 7.0:
+        return "High"
+    if cvss >= 4.0:
+        return "Medium"
+    if cvss >= 0.1:
+        return "Low"
+    return None
+
+
 def _read_severity_and_cvss(file_path: str) -> tuple[str | None, float]:
     try:
         with open(file_path) as f:
             data = json.load(f)
-        severity = data.get("severity")
         try:
             cvss = float(data.get("cvss_score", 0))
         except (TypeError, ValueError):
             cvss = 0.0
+        severity = _cvss_to_severity(cvss)
         return severity, cvss
     except Exception as e:
         logger.warning("Failed to read severity from %s: %s", file_path, e)
@@ -52,15 +64,11 @@ def _read_existing_id(file_path: str) -> str | None:
         return None
 
 
-def _normalize_severity(value: str) -> str | None:
-    mapping = {"critical": "Critical", "high": "High", "medium": "Medium", "low": "Low"}
-    return mapping.get(value.lower())
-
-
-def _inject_id_into_file(file_path: str, real_id: str) -> None:
+def _inject_id_and_severity(file_path: str, real_id: str, severity: str) -> None:
     with open(file_path) as f:
         data = json.load(f)
     data["id"] = real_id
+    data["severity"] = severity
     with open(file_path, "w") as f:
         json.dump(data, f, indent=2)
 
@@ -131,13 +139,11 @@ def _assign_ids_and_finalize(pending_paths: list[str], config: AuditConfig) -> l
 
     findings: list[tuple[str, str, float]] = []  # (pending_path, severity, cvss)
     for pending_path in pending_paths:
-        severity_raw, cvss = _read_severity_and_cvss(pending_path)
-        if severity_raw and severity_raw.lower() in _VALID_SEVERITIES:
-            normalized = _normalize_severity(severity_raw)
-            if normalized:
-                findings.append((pending_path, normalized, cvss))
+        severity, cvss = _read_severity_and_cvss(pending_path)
+        if severity:
+            findings.append((pending_path, severity, cvss))
         else:
-            logger.warning("Stage 5: Skipping %s because severity could not be read.", os.path.basename(pending_path))
+            logger.warning("Stage 5: Skipping %s because severity could not be derived from CVSS score.", os.path.basename(pending_path))
 
     # Sort by severity order, then by cvss_score descending (higher score → smaller ID)
     findings.sort(key=lambda x: (_SEVERITY_ORDER.index(x[1]), -x[2]))
@@ -149,7 +155,7 @@ def _assign_ids_and_finalize(pending_paths: list[str], config: AuditConfig) -> l
         real_id = f"{_SEVERITY_PREFIX[severity]}-{next_count:02d}"
         final_path = os.path.join(stage5_dir, f"{real_id}.json")
         shutil.move(pending_path, final_path)
-        _inject_id_into_file(final_path, real_id)
+        _inject_id_and_severity(final_path, real_id, severity)
         finalized.append(final_path)
         logger.info("Stage 5: Assigned %s to %s", real_id, os.path.basename(pending_path))
 

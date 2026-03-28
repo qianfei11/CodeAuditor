@@ -28,14 +28,19 @@ def _task_key(stage3_filename: str) -> str:
     return f"stage5:{stage3_filename}"
 
 
-def _read_severity_from_pending(file_path: str) -> str | None:
+def _read_severity_and_cvss(file_path: str) -> tuple[str | None, float]:
     try:
         with open(file_path) as f:
             data = json.load(f)
-        return data.get("severity")
+        severity = data.get("severity")
+        try:
+            cvss = float(data.get("cvss_score", 0))
+        except (TypeError, ValueError):
+            cvss = 0.0
+        return severity, cvss
     except Exception as e:
         logger.warning("Failed to read severity from %s: %s", file_path, e)
-        return None
+        return None, 0.0
 
 
 def _read_existing_id(file_path: str) -> str | None:
@@ -124,20 +129,21 @@ def _assign_ids_and_finalize(pending_paths: list[str], config: AuditConfig) -> l
                 counters[sev] = max(counters[sev], int(number_text))
                 break
 
-    findings: list[tuple[str, str]] = []  # (pending_path, severity)
+    findings: list[tuple[str, str, float]] = []  # (pending_path, severity, cvss)
     for pending_path in pending_paths:
-        severity_raw = _read_severity_from_pending(pending_path)
+        severity_raw, cvss = _read_severity_and_cvss(pending_path)
         if severity_raw and severity_raw.lower() in _VALID_SEVERITIES:
             normalized = _normalize_severity(severity_raw)
             if normalized:
-                findings.append((pending_path, normalized))
+                findings.append((pending_path, normalized, cvss))
         else:
             logger.warning("Stage 5: Skipping %s because severity could not be read.", os.path.basename(pending_path))
 
-    findings.sort(key=lambda x: _SEVERITY_ORDER.index(x[1]))
+    # Sort by severity order, then by cvss_score descending (higher score → smaller ID)
+    findings.sort(key=lambda x: (_SEVERITY_ORDER.index(x[1]), -x[2]))
 
     finalized: list[str] = list(existing_final_files)
-    for pending_path, severity in findings:
+    for pending_path, severity, _cvss in findings:
         next_count = counters[severity] + 1
         counters[severity] = next_count
         real_id = f"{_SEVERITY_PREFIX[severity]}-{next_count:02d}"

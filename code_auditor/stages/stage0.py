@@ -53,7 +53,7 @@ async def run_setup(config: AuditConfig) -> None:
     directories = [
         config.output_dir,
         os.path.join(config.output_dir, ".markers"),
-        os.path.join(config.output_dir, "stage-2-details"),
+        os.path.join(config.output_dir, "stage-1-details"),
         os.path.join(config.output_dir, "stage-3-details"),
         os.path.join(config.output_dir, "stage-4-details"),
         os.path.join(config.output_dir, "stage-5-details"),

@@ -1,72 +1,80 @@
-# Stage 2: Codebase Scale Assessment and Analysis Unit Definition
+# Stage 2: Module Structure
 
 You are performing **Stage 2** of an orchestrated software security audit. Write your output to disk; do not print it in your response.
 
 ## Your Task
 
-Assess the codebase scale of module **__MODULE_ID__** and produce one or more **analysis unit** files that will each be assigned to an independent sub-agent for bug analysis.
+Analyze the project at **__TARGET_PATH__** and decompose it into functional modules. Each module groups one or more related source files that implement a cohesive piece of functionality.
 
-- **Stage 1 output**: `__STAGE1_OUTPUT_PATH__`
-- **Result directory**: `__RESULT_DIR__`
-- **Your module**: `__MODULE_ID__`
+- **Output file**: `__OUTPUT_PATH__`
+
+## User Instructions
+
+__USER_INSTRUCTIONS__
 
 ## Workflow
 
-### Step 1: Read Stage 1 Output
+### Step 1: Enumerate Source Files
 
-Read `__STAGE1_OUTPUT_PATH__` (JSON) to identify the module's name, description, and file paths.
+List all source files in **__TARGET_PATH__**. Focus on implementation files (`.c`, `.cpp`, `.go`, `.rs`, `.py`, `.java`, `.ts`, etc.). Exclude: build artifacts, test files (`*_test.*`, `*.test.*`, `test/`, `tests/`), generated code, and third-party vendored dependencies.
 
-### Step 2: Measure Codebase Scale
+### Step 2: Understand the Project
 
-Enumerate the module's source files and measure their size:
+Read key project files to understand the project's purpose and architecture:
+- `README*`, build files (`Makefile`, `CMakeLists.txt`, `go.mod`, `Cargo.toml`, `package.json`, etc.)
+- Directory structure and naming conventions
+- Top-level source files that define the main entry points or architecture
 
-- Count files and total lines of code (LOC)
-- Survey the top-level structure: major subsystems, dispatch tables, protocol branches, distinct functional areas
-- Determine whether a single sub-agent can analyze the full module with sufficient depth
+### Step 3: Group Files into Functional Modules
 
-**Scale thresholds (guidelines, not hard rules):**
+Group related source files into modules based on what the code **does**, not where it lives. Each module should:
 
-| Scale | Size | Decision |
-|-------|------|----------|
-| Small | ≤ 800 LOC, ≤ 5 files | Single analysis unit |
-| Medium | 800–2000 LOC, 5–15 files | Single analysis unit (with focused scope) |
-| Large | > 2000 LOC or > 15 files | Split into multiple units |
+- Implement a cohesive feature, subsystem, or protocol component
+- Contain one or more files — every source file must belong to exactly one module
+- Have a clear, descriptive name that reflects its function
 
-### Step 3: Define Analysis Units and Write Output
+Good split boundaries:
+- Protocol parsing vs. protocol handling vs. session/state management
+- Different protocol versions or message types
+- Core logic vs. I/O vs. configuration vs. utility code
+- Independent subsystems with minimal coupling
 
-Write **one JSON file per analysis unit** to the result directory. Name them:
-- `__RESULT_DIR__/__MODULE_ID__-1.json`
-- `__RESULT_DIR__/__MODULE_ID__-2.json` (if split)
-- etc.
+Do not split purely by directory — group by functionality. Do not merge unrelated subsystems into one module just because they share a directory.
 
-Each file is a self-contained work package for a sub-agent:
+### Step 4: Write Output
+
+Write your output to **__OUTPUT_PATH__** as a JSON object with this exact structure:
 
 ```json
 {
-  "description": "Short description of what this unit covers",
-  "files": ["relative/path/to/file1.c", "relative/path/to/file2.c"],
-  "focus": "Concrete analysis guidance: which functions or subsystems are most complex, which code paths handle external input, what data structures are central, which operations are dangerous (memory copies, size arithmetic, state transitions). Be specific enough that a sub-agent can start analysis immediately."
+  "project_summary": {
+    "path": "__TARGET_PATH__",
+    "name": "project name",
+    "language": "primary language",
+    "description": "Brief description of what the project does"
+  },
+  "modules": [
+    {
+      "id": "M-1",
+      "name": "module name",
+      "description": "description of what this module does",
+      "files": ["file paths or directory (e.g. src/parser/ or src/foo.c, src/bar.c)"]
+    }
+  ]
 }
 ```
 
-**Splitting rules:**
-
-1. **Non-overlapping files.** Each unit must cover a distinct, non-overlapping set of source files.
-2. **Split at stable boundaries.** Prefer protocol message type boundaries, top-level dispatch branches, or distinct functional layers.
-3. **Size-bound each unit.** Aim for 500–1500 LOC per unit.
-4. **Aim for 2–5 units.** If more seem necessary, reconsider — some units may be mergeable.
-5. **Focus must be actionable.** Name concrete functions, data flows, or code patterns — not generic phrases.
-
-**Output rules:**
-- Each file must be valid JSON (no trailing commas, no comments)
-- The `files` field must be a JSON array of strings (file paths)
-- If the module needs only one analysis unit, write exactly one file: `__MODULE_ID__-1.json`
+**Rules:**
+- Every source file must appear in exactly one module (no omissions, no overlap)
+- Module IDs must follow the pattern `M-1`, `M-2`, `M-3`, ...
+- Descriptions must describe what the code *does*, not just where it lives
+- The `files` field may be a directory path (e.g., `src/parser/`) if all files in it belong to this module, or a comma-separated list of individual relative file paths
+- The output must be valid JSON (no trailing commas, properly quoted strings)
 
 ## Completion Checklist
 
-- [ ] Stage 1 output read to obtain module name and file paths
-- [ ] All source files enumerated and LOC counted
-- [ ] Scale assessed and split decision made
-- [ ] One JSON file per analysis unit written to `__RESULT_DIR__/`
-- [ ] No overlapping files between units (if split)
-- [ ] Each focus is specific and actionable
+- [ ] All source files enumerated (excluding tests, generated code, third-party deps)
+- [ ] Files grouped into cohesive functional modules with no overlaps or omissions
+- [ ] Each module has a clear, functional name and a concrete one-line description
+- [ ] Output written to **__OUTPUT_PATH__** as valid JSON with `project_summary` and `modules` fields
+- [ ] All module IDs follow the `M-N` pattern

@@ -18,9 +18,9 @@ async def run_stage6(config: AuditConfig, checkpoint: CheckpointManager) -> str:
         logger.info("Stage 6 already complete.")
         return report_path
 
-    stage4_threat_model = os.path.join(config.output_dir, "stage-4-security-context.md")
+    research_record = os.path.join(config.output_dir, "stage-1-details", "stage-1-security-context.json")
     stage5_dir = os.path.join(config.output_dir, "stage-5-details")
-    summary = generate_report(stage4_threat_model, stage5_dir, report_path)
+    summary = generate_report(research_record, stage5_dir, report_path)
 
     stat = os.stat(report_path)
     if stat.st_size == 0:

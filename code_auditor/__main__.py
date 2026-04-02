@@ -12,6 +12,9 @@ from .orchestrator import run_audit
 logger = get_logger("main")
 
 
+_ALL_STAGES = list(range(7))  # 0–6
+
+
 def _parse_skip_stages(raw: str | None) -> list[int]:
     if not raw:
         return []
@@ -34,6 +37,8 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--threat-model", default=DEFAULT_THREAT_MODEL, help="Override the default threat model")
     parser.add_argument("--scope", default="", help="Additional scope instructions for stage 1")
     parser.add_argument("--skip-stages", default=None, help="Comma-separated list of stages to skip")
+    parser.add_argument("--only-stage", type=int, choices=_ALL_STAGES, default=None,
+                        help="Run only this stage (stage 0 always runs for setup)")
     parser.add_argument("--model", default="claude-sonnet-4-6", help="Claude model to use (default: claude-sonnet-4-6)")
     parser.add_argument("--log-level", default="INFO", choices=["DEBUG", "INFO", "WARNING", "ERROR"])
     return parser
@@ -50,13 +55,22 @@ def main() -> None:
 
     output_dir = os.path.realpath(args.output_dir or os.path.join(target, "audit-output"))
 
+    if args.only_stage is not None and args.skip_stages is not None:
+        print("Error: --only-stage and --skip-stages are mutually exclusive.", file=sys.stderr)
+        sys.exit(1)
+
+    if args.only_stage is not None:
+        skip_stages = [s for s in _ALL_STAGES if s != 0 and s != args.only_stage]
+    else:
+        skip_stages = _parse_skip_stages(args.skip_stages)
+
     config = AuditConfig(
         target=target,
         output_dir=output_dir,
         max_parallel=args.max_parallel,
         threat_model=args.threat_model,
         scope=args.scope,
-        skip_stages=_parse_skip_stages(args.skip_stages),
+        skip_stages=skip_stages,
         resume=args.resume,
         log_level=args.log_level.upper(),
         model=args.model,

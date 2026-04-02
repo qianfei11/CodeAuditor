@@ -34,13 +34,13 @@ class CheckpointManager:
 
     def _resolve(self, task_key: str) -> str | None:
         if task_key == "stage1":
-            return os.path.join(self._output_dir, "stage-1-modules.json")
-        if task_key.startswith("stage2:"):
-            return self._marker_path(task_key)
+            return os.path.join(self._output_dir, "stage-1-details", "stage-1-security-context.json")
+        if task_key == "stage2":
+            return os.path.join(self._output_dir, "stage-2-modules.json")
         if task_key.startswith("stage3:"):
             return self._marker_path(task_key)
-        if task_key == "stage4":
-            return os.path.join(self._output_dir, "stage-4-security-context.md")
+        if task_key.startswith("stage4:"):
+            return self._marker_path(task_key)
         if task_key.startswith("stage5:"):
             marker = self._marker_path(task_key)
             if os.path.exists(marker):
@@ -54,7 +54,7 @@ class CheckpointManager:
         return None
 
     def _needs_marker(self, task_key: str) -> bool:
-        return task_key.startswith("stage2:") or task_key.startswith("stage3:") or task_key.startswith("stage5:")
+        return task_key.startswith("stage3:") or task_key.startswith("stage4:") or task_key.startswith("stage5:")
 
     def _marker_path(self, task_key: str) -> str:
         return os.path.join(self._markers_dir, task_key.replace(":", "-"))

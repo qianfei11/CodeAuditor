@@ -1,12 +1,19 @@
-# Stage 1: Module Structure
+# Stage 1: Security Context Research
 
-You are performing **Stage 1** of an orchestrated software security audit. Write your output to disk; do not print it in your response.
+You are performing a stage of an orchestrated software security audit. Write your output to disk; do not print it in your response.
 
 ## Your Task
 
-Analyze the project at **__TARGET_PATH__** and decompose it into functional modules. Each module groups one or more related source files that implement a cohesive piece of functionality.
+Research the project at **__TARGET_PATH__** and produce three documents:
+1. A **research record** capturing all security-relevant findings from your research (used as input for generating the directives below).
+2. An **auditing focus** directive identifying which modules and components are most vulnerability-productive (injected into bug discovery agents).
+3. A **vulnerability criteria** directive defining the boundary between bugs and vulnerabilities (injected into bug discovery and evaluation agents).
 
-- **Output file**: `__OUTPUT_PATH__`
+- **Output file (research record)**: `__OUTPUT_PATH__`
+- **Output file (auditing focus)**: `__AUDITING_FOCUS_PATH__`
+- **Output file (vulnerability criteria)**: `__VULN_CRITERIA_PATH__`
+- **Today's date**: __TODAY__
+- **Search window**: __START_DATE__ to __TODAY__ (recent 5 years)
 
 ## User Instructions
 
@@ -14,67 +21,156 @@ __USER_INSTRUCTIONS__
 
 ## Workflow
 
-### Step 1: Enumerate Source Files
+### Step 1: Security Context Research
 
-List all source files in **__TARGET_PATH__**. Focus on implementation files (`.c`, `.cpp`, `.go`, `.rs`, `.py`, `.java`, `.ts`, etc.). Exclude: build artifacts, test files (`*_test.*`, `*.test.*`, `test/`, `tests/`), generated code, and third-party vendored dependencies.
+Investigate the project's security posture by collecting information from the following sources, in order of priority. You do not have to exhaust every source — stop when you have collected enough information to produce the outputs described below.
 
-### Step 2: Understand the Project
+**Source tier 1:**
+- Read `SECURITY.md` (or equivalent) carefully. Note the vulnerability disclosure process, scope statements, and critically, any links to external resources (security announcements page, bug bounty program, mailing lists).
+- If SECURITY.md or other docs link to a **project website**, a **security announcements page**, or a **bug bounty program**, you **must** visit them.
 
-Read key project files to understand the project's purpose and architecture:
-- `README*`, build files (`Makefile`, `CMakeLists.txt`, `go.mod`, `Cargo.toml`, `package.json`, etc.)
-- Directory structure and naming conventions
-- Top-level source files that define the main entry points or architecture
+**Source tier 2:**
+- Search git history for security-relevant commits: keywords "CVE", "security", "fix", "vulnerability", "overflow", "injection", "bypass", "DOS", "crash", "patch", etc.
 
-### Step 3: Group Files into Functional Modules
+**Source tier 3 (fallback only):**
+- Search the Internet for CVEs, security advisories, and vulnerability reports associated with this project.
+- Check for fuzzing infrastructure (`fuzz/`, `oss-fuzz/`, `tests/fuzz*`, etc.).
+- Check `oss-security@lists.openwall.com` archives if the project is an open-source systems project.
+- Check NVD, OSV.dev, and GitHub Advisory Database.
+- For widely-packaged projects, check distro security trackers (Debian, Red Hat) website.
 
-Group related source files into modules based on what the code **does**, not where it lives. Each module should:
+**Important**: Only consult tier 3 sources if tiers 1 and 2 yield insufficient information. Tier 3 is a fallback, not a default step.
 
-- Implement a cohesive feature, subsystem, or protocol component
-- Contain one or more files — every source file must belong to exactly one module
-- Have a clear, descriptive name that reflects its function
+**Information to collect:**
+- **Scope announcements** (from tier 1 only): Which functional modules and issue types are explicitly declared in or out of vulnerability scope by the project.
 
-Good split boundaries:
-- Protocol parsing vs. protocol handling vs. session/state management
-- Different protocol versions or message types
-- Core logic vs. I/O vs. configuration vs. utility code
-- Independent subsystems with minimal coupling
+- **Historical vulnerabilities** (from tiers 1, 2, and 3): For each finding, record: CVE ID (if any), date, affected module/component, vulnerability class, root cause, impact, severity, and attacker profile (attack vector, prerequisites, network position).
 
-Do not split purely by directory — group by functionality. Do not merge unrelated subsystems into one module just because they share a directory.
+### Step 2: Write Research Record
 
-### Step 4: Write Output
+Write to **__OUTPUT_PATH__**. This file is a structured record of all findings from Step 1. It serves as the evidence base from which the auditing directives in Step 3 are derived.
 
-Write your output to **__OUTPUT_PATH__** as a JSON object with this exact structure:
+Use this JSON structure:
 
 ```json
 {
-  "project_summary": {
+  "project": {
+    "name": "",
     "path": "__TARGET_PATH__",
-    "name": "project name",
-    "language": "primary language",
-    "description": "Brief description of what the project does"
+    "language": "",
+    "description": "",
+    "deployment_model": ""
   },
-  "modules": [
+  "sources_consulted": [
     {
-      "id": "M-1",
-      "name": "module name",
-      "description": "description of what this module does",
-      "files": ["file paths or directory (e.g. src/parser/ or src/foo.c, src/bar.c)"]
+      "source": "",
+      "url_or_path": "",
+      "tier": 1,
+      "notes": ""
     }
-  ]
+  ],
+  "scope_announcements": {
+    "in_scope_modules": [""],
+    "out_of_scope_modules": [""],
+    "in_scope_issue_types": [""],
+    "out_of_scope_issue_types": [""],
+    "raw_quotes": [""]
+  },
+  "historical_vulnerabilities": [
+    {
+      "cve_id": "",
+      "date": "",
+      "affected_component": "",
+      "vulnerability_class": "",
+      "root_cause": "",
+      "impact": "",
+      "severity": "",
+      "attacker_profile": "",
+      "summary": ""
+    }
+  ],
+  "fuzzing_targets": [""],
+  "notes": ""
 }
 ```
 
-**Rules:**
-- Every source file must appear in exactly one module (no omissions, no overlap)
-- Module IDs must follow the pattern `M-1`, `M-2`, `M-3`, ...
-- Descriptions must describe what the code *does*, not just where it lives
-- The `files` field may be a directory path (e.g., `src/parser/`) if all files in it belong to this module, or a comma-separated list of individual relative file paths
-- The output must be valid JSON (no trailing commas, properly quoted strings)
+Fields may be empty or omitted if no relevant information was found, but do not fabricate data. Record `raw_quotes` where possible so the directives can be grounded in primary sources.
+
+### Step 3: Write Auditing Directives
+
+From the research record, draw conclusions and write two separate directive files. Each directive will be selectively injected into the context of downstream analysis agents. They must be **concise and actionable** — generic security advice wastes context budget. Be specific to this project. Every claim in a directive should be traceable to a finding in the research record.
+
+**Important**: Do not include commit hashes or CVE IDs in the directives. They provide no value in the context of the auditing process. Write only actionable conclusions.
+
+#### Directive 1: Auditing Focus
+
+Write to **__AUDITING_FOCUS_PATH__**.
+
+Identify which modules, components, and code paths are most vulnerability-productive and deserve the closest scrutiny during bug discovery.
+
+Structure:
+
+```markdown
+# Auditing Focus
+
+## Explicit In-Scope and Out-of-Scope Modules
+
+{List any modules or code areas that the project explicitly declares in or out of scope for vulnerability reports. If the project has no explicit scope statement, state that and move on.}
+
+## Historical Hot Spots
+
+{Which vulnerability classes cluster in which components, derived from historical CVEs and security fixes. Example:
+- Buffer overflows cluster in the ASN.1 parsing code
+- Use-after-free bugs cluster in the connection state machine
+
+If no historical data is available, leave this section empty.}
+```
+
+#### Directive 2: Vulnerability Criteria
+
+Write to **__VULN_CRITERIA_PATH__**.
+
+Define the boundary between bugs and vulnerabilities to help analysis agents decide whether a given bug crosses the line into a security vulnerability.
+
+**Guidelines for writing this directive:**
+- If the project provides explicit scope guidelines (especially out-of-scope declarations), these take highest priority. All explicit guidelines must be carefully understood and included in the directive.
+- If the project's explicit criteria are comprehensive enough to define the bug/vulnerability boundary, omit the Historical Calibration section entirely.
+- If a Historical Calibration section is needed, derive it strictly from the project's historical vulnerability data. Be concise. Summarize: (1) the types of issues that have historically been classified as vulnerabilities, and (2) the attacker profile (attack vector, prerequisites, network position) that characterizes past vulnerabilities.
+
+Structure:
+
+```markdown
+# Vulnerability Criteria
+
+## Explicit In-Scope and Out-of-Scope Issue Types
+
+{List any issue types that the project explicitly declares in or out of scope for vulnerability reports. Example:
+- In scope: memory corruption, authentication bypass, remote code execution
+- Out of scope: denial of service requiring local access, issues in test code
+If the project has no explicit scope statement, state that and move on.}
+
+## Historical Calibration
+
+{Omit this section if explicit criteria above are comprehensive enough.
+
+Otherwise, summarize from the project's historical vulnerability data:
+
+1. Issue types that have historically been classified as vulnerabilities in this project. Example:
+   - Heap buffer over-read in protocol parser → vulnerability (availability + info leak)
+   - NULL pointer dereference in error path reachable from network → vulnerability (availability)
+   - Off-by-one in internal utility not reachable from external input → not a vulnerability
+
+2. Attacker profile: the typical attack vector, prerequisites, and network position of past vulnerabilities.
+
+If no historical data is available, leave this section empty.}
+```
 
 ## Completion Checklist
 
-- [ ] All source files enumerated (excluding tests, generated code, third-party deps)
-- [ ] Files grouped into cohesive functional modules with no overlaps or omissions
-- [ ] Each module has a clear, functional name and a concrete one-line description
-- [ ] Output written to **__OUTPUT_PATH__** as valid JSON with `project_summary` and `modules` fields
-- [ ] All module IDs follow the `M-N` pattern
+- [ ] SECURITY.md (or equivalent) read; links followed to project websites
+- [ ] Security announcements page visited (if available)
+- [ ] Bug bounty scope collected (if available)
+- [ ] Security history researched (git log, CVEs, advisories; tier 3 sources only if tier 1-2 were sparse)
+- [ ] Research record written to `__OUTPUT_PATH__` with all findings
+- [ ] Auditing focus directive written to `__AUDITING_FOCUS_PATH__`
+- [ ] Vulnerability criteria directive written to `__VULN_CRITERIA_PATH__`

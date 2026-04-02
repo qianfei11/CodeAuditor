@@ -8,7 +8,7 @@ Evaluate one vulnerability finding from Stage 3.
 
 - **Finding file**: `__FINDING_FILE_PATH__`
 - **Output file**: `__OUTPUT_PATH__` (write here ONLY if the vulnerability is confirmed and CVSS ≥ 4.0)
-- **Evaluation guidance** (bug vs. vulnerability criteria + severity assessment): `__INSTRUCTION_PATH__`
+- **Vulnerability criteria** (bug vs. vulnerability boundary + historical calibration): `__VULN_CRITERIA_PATH__`
 
 ## Workflow
 
@@ -37,7 +37,7 @@ If the vulnerability requires a non-default compile flag or non-default runtime 
 
 ### Step 4: Assess Impact and CVSS Score
 
-Read `__INSTRUCTION_PATH__` for project-specific evaluation context: the bug-vs-vulnerability criteria, attacker profile, historical severity benchmarks, and deployment-specific modifiers.
+Read `__VULN_CRITERIA_PATH__` for project-specific vulnerability criteria: the bug-vs-vulnerability boundary and historical calibration.
 
 Using this context together with your pre-requisite assessment, analyze the security impact:
 - Determine what an attacker can achieve (RCE, DoS, info-leak, auth bypass, etc.)
@@ -73,7 +73,7 @@ Write your evaluation to `__OUTPUT_PATH__` as a single JSON object:
 - [ ] Finding file read and source code verified
 - [ ] False-positive check performed
 - [ ] Pre-requisites assessed (compile flags, runtime config, deployment assumptions)
-- [ ] Evaluation guidance read (`__INSTRUCTION_PATH__`)
+- [ ] Vulnerability criteria read (`__VULN_CRITERIA_PATH__`)
 - [ ] Non-default-config CVSS cap applied if applicable
 - [ ] If confirmed and CVSS ≥ 4.0: output written to `__OUTPUT_PATH__` as valid JSON
 - [ ] If false positive or CVSS < 4.0: no output file written

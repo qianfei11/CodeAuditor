@@ -16,28 +16,77 @@ class GeneratedReportSummary:
     severity_counts: dict[str, int] = field(default_factory=dict)
 
 
-def _extract_section(content: str, header: str) -> str:
-    escaped = re.escape(header)
-    m = re.search(rf"{escaped}\n([\s\S]*?)(?=\n## |$)", content)
-    return m.group(1).strip() if m else ""
+def _parse_research_record(file_path: str) -> tuple[str, str]:
+    """Extract project summary and threat context from the stage 1 research record (JSON).
 
-
-def _parse_stage4_security_context(file_path: str) -> tuple[str, str]:
-    """Extract project summary and threat context from the stage 4 security context report.
-
-    Returns (project_summary, threat_context) where threat_context combines
-    Attacker Profile, Attack Surface, and Vulnerability Patterns sections.
+    Returns (project_summary, threat_context).
     """
-    content = Path(file_path).read_text()
-    project_summary = _extract_section(content, "## Project Summary")
+    try:
+        data = json.loads(Path(file_path).read_text())
+    except (json.JSONDecodeError, OSError):
+        return "", ""
 
+    # Project summary from the "project" object.
+    project = data.get("project", {})
+    summary_parts: list[str] = []
+    if project.get("name"):
+        summary_parts.append(f"- **Project**: {project['name']}")
+    if project.get("path"):
+        summary_parts.append(f"- **Path**: {project['path']}")
+    if project.get("language"):
+        summary_parts.append(f"- **Language**: {project['language']}")
+    if project.get("description"):
+        summary_parts.append(f"- **Description**: {project['description']}")
+    if project.get("deployment_model"):
+        summary_parts.append(f"- **Deployment model**: {project['deployment_model']}")
+    project_summary = "\n".join(summary_parts)
+
+    # Threat context from historical vulnerabilities and scope.
     threat_parts: list[str] = []
-    for section in ("## Attacker Profile", "## Attack Surface", "## Vulnerability Patterns"):
-        text = _extract_section(content, section)
-        if text:
-            threat_parts.append(f"{section}\n\n{text}")
 
-    return project_summary, "\n\n".join(threat_parts)
+    scope = data.get("scope_announcements", {})
+    in_scope_modules = scope.get("in_scope_modules", [])
+    out_of_scope_modules = scope.get("out_of_scope_modules", [])
+    in_scope_issue_types = scope.get("in_scope_issue_types", [])
+    out_of_scope_issue_types = scope.get("out_of_scope_issue_types", [])
+    has_scope = any([in_scope_modules, out_of_scope_modules, in_scope_issue_types, out_of_scope_issue_types])
+    if has_scope:
+        threat_parts.append("## Scope Announcements\n")
+        if in_scope_modules:
+            threat_parts.append("**In-scope modules**: " + "; ".join(s for s in in_scope_modules if s))
+        if out_of_scope_modules:
+            threat_parts.append("**Out-of-scope modules**: " + "; ".join(s for s in out_of_scope_modules if s))
+        if in_scope_issue_types:
+            threat_parts.append("**In-scope issue types**: " + "; ".join(s for s in in_scope_issue_types if s))
+        if out_of_scope_issue_types:
+            threat_parts.append("**Out-of-scope issue types**: " + "; ".join(s for s in out_of_scope_issue_types if s))
+
+    vulns = data.get("historical_vulnerabilities", [])
+    if vulns:
+        threat_parts.append("\n## Known Vulnerabilities and Security History\n")
+        for v in vulns:
+            parts = []
+            if v.get("cve_id"):
+                parts.append(f"**{v['cve_id']}**")
+            if v.get("date"):
+                parts.append(f"({v['date']})")
+            if v.get("affected_component"):
+                parts.append(f"in {v['affected_component']}")
+            if v.get("vulnerability_class"):
+                parts.append(f"[{v['vulnerability_class']}]")
+            if v.get("severity"):
+                parts.append(f"Severity: {v['severity']}")
+            summary_text = v.get("summary", "")
+            line = " ".join(parts)
+            if summary_text:
+                line += f" — {summary_text}"
+            threat_parts.append(f"- {line}")
+
+    severity_guidance = data.get("severity_guidance", {})
+    if severity_guidance.get("notes"):
+        threat_parts.append(f"\n## Severity Guidance\n\n{severity_guidance['notes']}")
+
+    return project_summary, "\n".join(threat_parts)
 
 
 def _parse_finding_file(file_path: str) -> dict | None:
@@ -106,11 +155,11 @@ def _format_finding_detail(finding: dict) -> str:
 
 
 def generate_report(
-    stage4_threat_model_path: str,
+    research_record_path: str,
     stage5_dir: str,
     output_path: str,
 ) -> GeneratedReportSummary:
-    project_summary, threat_context = _parse_stage4_security_context(stage4_threat_model_path)
+    project_summary, threat_context = _parse_research_record(research_record_path)
 
     raw_findings: list[dict] = []
     for file_path in list_json_files_sync(stage5_dir):

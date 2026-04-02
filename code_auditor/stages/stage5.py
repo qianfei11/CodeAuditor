@@ -79,25 +79,25 @@ def _list_existing_final_files(stage5_dir: str) -> list[str]:
 
 
 async def _run_finding(
-    stage3_file_path: str,
+    stage4_file_path: str,
     config: AuditConfig,
     checkpoint: CheckpointManager,
-    instruction_path: str,
+    vuln_criteria_path: str,
 ) -> str | None:
-    stage3_filename = os.path.basename(stage3_file_path)
-    key = _task_key(stage3_filename)
+    stage4_filename = os.path.basename(stage4_file_path)
+    key = _task_key(stage4_filename)
     pending_dir = os.path.join(config.output_dir, "stage-5-details", "_pending")
-    pending_path = os.path.join(pending_dir, stage3_filename)
+    pending_path = os.path.join(pending_dir, stage4_filename)
 
     if checkpoint.is_complete(key):
-        logger.info("Stage 5: %s already complete, skipping.", stage3_filename)
+        logger.info("Stage 5: %s already complete, skipping.", stage4_filename)
         return pending_path if os.path.exists(pending_path) else None
 
-    logger.info("Stage 5: Starting evaluation of %s.", stage3_filename)
+    logger.info("Stage 5: Starting evaluation of %s.", stage4_filename)
     prompt = load_prompt("stage5.md", {
-        "finding_file_path": stage3_file_path,
+        "finding_file_path": stage4_file_path,
         "output_path": pending_path,
-        "instruction_path": instruction_path,
+        "vuln_criteria_path": vuln_criteria_path,
     })
 
     await run_agent(prompt, config, cwd=config.target)
@@ -117,7 +117,7 @@ async def _run_finding(
                 logger.warning("Stage 5: Repair failed for %s\n%s", pending_path, format_validation_issues(issues))
 
     checkpoint.mark_complete(key)
-    logger.info("Stage 5: %s complete (confirmed=%s)", stage3_filename, confirmed)
+    logger.info("Stage 5: %s complete (confirmed=%s)", stage4_filename, confirmed)
     return pending_path if confirmed else None
 
 
@@ -220,7 +220,7 @@ async def run_stage5(
     finding_files: list[str],
     config: AuditConfig,
     checkpoint: CheckpointManager,
-    instruction_path: str,
+    vuln_criteria_path: str,
 ) -> list[str]:
     if not finding_files:
         logger.info("Stage 5: No findings to evaluate.")
@@ -232,7 +232,7 @@ async def run_stage5(
     results = await run_parallel_limited(
         finding_files,
         config.max_parallel,
-        lambda ff, _: _run_finding(ff, config, checkpoint, instruction_path),
+        lambda ff, _: _run_finding(ff, config, checkpoint, vuln_criteria_path),
     )
 
     confirmed_pending: list[str] = []

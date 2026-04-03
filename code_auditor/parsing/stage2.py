@@ -7,7 +7,7 @@ import re
 from ..config import AnalysisUnit
 
 
-def parse_au_files(result_dir: str, only_analyze: bool = True) -> list[AnalysisUnit]:
+def parse_au_files(result_dir: str) -> list[AnalysisUnit]:
     """Read all AU-*.json files from result_dir and return AnalysisUnit list."""
     pattern = re.compile(r"^AU-(\d+)\.json$")
     units: list[AnalysisUnit] = []
@@ -22,11 +22,8 @@ def parse_au_files(result_dir: str, only_analyze: bool = True) -> list[AnalysisU
         path = os.path.join(result_dir, name)
         try:
             with open(path) as f:
-                data = json.load(f)
+                json.load(f)
         except (json.JSONDecodeError, OSError):
-            continue
-
-        if only_analyze and not data.get("analyze", True):
             continue
 
         au_id = f"AU-{m.group(1)}"

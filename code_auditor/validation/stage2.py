@@ -8,6 +8,8 @@ from ..config import ValidationIssue
 
 _PLACEHOLDERS = {"none", "n/a", "...", "tbd", ""}
 
+MAX_ANALYSIS_UNITS = 30
+
 
 def _is_blank(value: object) -> bool:
     if isinstance(value, str):
@@ -18,16 +20,20 @@ def _is_blank(value: object) -> bool:
 
 
 def validate_stage2_dir(result_dir: str) -> list[ValidationIssue]:
-    """Validate the directory of AU-*.json files produced by stage 2."""
+    """Validate the directory of AU-*.json files and triage.json produced by stage 2."""
     issues: list[ValidationIssue] = []
 
     if not os.path.isdir(result_dir):
         return [ValidationIssue(
             description=f"Result directory does not exist: {result_dir}",
-            expected="A directory containing AU-*.json files.",
+            expected="A directory containing triage.json and AU-*.json files.",
             fix="Ensure stage 2 wrote output to the correct directory.",
         )]
 
+    # Validate triage.json
+    issues.extend(validate_triage_file(os.path.join(result_dir, "triage.json")))
+
+    # Collect AU files
     pattern = re.compile(r"^AU-(\d+)\.json$")
     au_files = sorted(
         (name for name in os.listdir(result_dir) if pattern.match(name)),
@@ -35,7 +41,7 @@ def validate_stage2_dir(result_dir: str) -> list[ValidationIssue]:
     )
 
     if not au_files:
-        return [ValidationIssue(
+        return issues + [ValidationIssue(
             description="No AU-*.json files found in result directory.",
             expected="At least one AU-{N}.json file.",
             fix="Write analysis unit files as AU-1.json, AU-2.json, etc.",
@@ -52,28 +58,18 @@ def validate_stage2_dir(result_dir: str) -> list[ValidationIssue]:
                 fix=f"Rename {name} to AU-{expected_num}.json.",
             ))
 
-    # Validate each file
-    analyze_count = 0
+    # Check total AU count
+    if len(au_files) > MAX_ANALYSIS_UNITS:
+        issues.append(ValidationIssue(
+            description=f"Too many analysis units: {len(au_files)} (max {MAX_ANALYSIS_UNITS}).",
+            expected=f"At most {MAX_ANALYSIS_UNITS} analysis unit files.",
+            fix="Reduce the number of analysis units by being more selective in the triage step.",
+        ))
+
+    # Validate each AU file
     for name in au_files:
         file_path = os.path.join(result_dir, name)
-        file_issues = validate_stage2_au_file(file_path)
-        issues.extend(file_issues)
-
-        # Count analyze: true
-        try:
-            with open(file_path) as f:
-                data = json.load(f)
-            if data.get("analyze", True):
-                analyze_count += 1
-        except (json.JSONDecodeError, OSError):
-            pass
-
-    if analyze_count > 50:
-        issues.append(ValidationIssue(
-            description=f"Too many units selected for analysis: {analyze_count} (max 50).",
-            expected="At most 50 units with analyze: true.",
-            fix="Set analyze to false for lower-priority units.",
-        ))
+        issues.extend(validate_stage2_au_file(file_path))
 
     return issues
 
@@ -96,7 +92,7 @@ def validate_stage2_au_file(file_path: str) -> list[ValidationIssue]:
     if not content.strip():
         return [ValidationIssue(
             description=f"{name}: file is empty.",
-            expected="A JSON object with description, files, focus, and analyze fields.",
+            expected="A JSON object with description, files, and focus fields.",
             fix="Write the analysis unit definition as JSON.",
         )]
 
@@ -127,11 +123,93 @@ def validate_stage2_au_file(file_path: str) -> list[ValidationIssue]:
             expected="Concrete analysis guidance.",
             fix='Add a "focus" field with actionable analysis guidance.',
         ))
-    if "analyze" not in data or not isinstance(data["analyze"], bool):
+
+    return issues
+
+
+def validate_triage_file(file_path: str) -> list[ValidationIssue]:
+    """Validate the triage.json manifest."""
+    issues: list[ValidationIssue] = []
+
+    try:
+        with open(file_path) as f:
+            content = f.read()
+    except FileNotFoundError:
+        return [ValidationIssue(
+            description="triage.json not found.",
+            expected="A triage manifest at triage.json in the result directory.",
+            fix="Write the triage manifest before creating AU files.",
+        )]
+
+    if not content.strip():
+        return [ValidationIssue(
+            description="triage.json is empty.",
+            expected="A JSON array of triage entries.",
+            fix="Write the triage manifest as a JSON array.",
+        )]
+
+    try:
+        data = json.loads(content)
+    except json.JSONDecodeError as e:
+        return [ValidationIssue(
+            description=f"triage.json: invalid JSON: {e}",
+            expected="Valid JSON.",
+            fix="Fix the JSON syntax error.",
+        )]
+
+    if not isinstance(data, list):
+        return [ValidationIssue(
+            description="triage.json: root element is not an array.",
+            expected="A JSON array of triage entries.",
+            fix="Wrap the triage entries in a JSON array.",
+        )]
+
+    if len(data) == 0:
         issues.append(ValidationIssue(
-            description=f'{name}: missing or non-boolean "analyze".',
-            expected='A boolean "analyze" field (true or false).',
-            fix='Add "analyze": true or "analyze": false.',
+            description="triage.json: empty array.",
+            expected="At least one triage entry.",
+            fix="Add triage entries for the project's functional areas.",
+        ))
+
+    selected_count = 0
+    for i, entry in enumerate(data):
+        if not isinstance(entry, dict):
+            issues.append(ValidationIssue(
+                description=f"triage.json[{i}]: entry is not an object.",
+                expected="Each triage entry must be a JSON object.",
+                fix=f"Fix entry at index {i}.",
+            ))
+            continue
+
+        for field in ("area", "rationale"):
+            if _is_blank(entry.get(field)):
+                issues.append(ValidationIssue(
+                    description=f'triage.json[{i}]: missing or blank "{field}".',
+                    expected=f'A non-empty "{field}" field.',
+                    fix=f'Add a "{field}" field to entry {i}.',
+                ))
+
+        if _is_blank(entry.get("files")):
+            issues.append(ValidationIssue(
+                description=f'triage.json[{i}]: missing or empty "files".',
+                expected="A non-empty array of file paths.",
+                fix=f'Add a "files" array to entry {i}.',
+            ))
+
+        if "selected" not in entry or not isinstance(entry["selected"], bool):
+            issues.append(ValidationIssue(
+                description=f'triage.json[{i}]: missing or non-boolean "selected".',
+                expected='A boolean "selected" field (true or false).',
+                fix=f'Add "selected": true or "selected": false to entry {i}.',
+            ))
+        elif entry["selected"]:
+            selected_count += 1
+
+    if selected_count > MAX_ANALYSIS_UNITS:
+        issues.append(ValidationIssue(
+            description=f"triage.json: too many areas selected: {selected_count} (max {MAX_ANALYSIS_UNITS}).",
+            expected=f"At most {MAX_ANALYSIS_UNITS} areas with selected: true.",
+            fix="Reduce selected areas by being more selective.",
         ))
 
     return issues

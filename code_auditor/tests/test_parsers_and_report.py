@@ -6,40 +6,50 @@ import tempfile
 
 from code_auditor.parsing.stage2 import parse_au_files, parse_auditing_focus
 from code_auditor.report.generate import generate_report
-from code_auditor.validation.stage2 import validate_stage2_au_file, validate_stage2_dir
+from code_auditor.validation.stage2 import (
+    MAX_ANALYSIS_UNITS,
+    validate_stage2_au_file,
+    validate_stage2_dir,
+    validate_triage_file,
+)
 from code_auditor.validation.stage4 import validate_stage4_file
+
+
+def _write_au(path: str, desc: str, files: list[str], focus: str) -> None:
+    with open(path, "w") as f:
+        json.dump({"description": desc, "files": files, "focus": focus}, f)
+
+
+def _write_triage(result_dir: str, entries: list[dict]) -> None:
+    with open(os.path.join(result_dir, "triage.json"), "w") as f:
+        json.dump(entries, f)
+
+
+def _make_triage_entry(area: str, files: list[str], selected: bool) -> dict:
+    return {
+        "area": area,
+        "files": files,
+        "loc": 100,
+        "rationale": f"{'Selected' if selected else 'Excluded'} for testing.",
+        "selected": selected,
+    }
 
 
 def test_stage2_parser_reads_au_files():
     with tempfile.TemporaryDirectory() as tmp:
-        for i, (desc, files, focus, analyze) in enumerate([
-            ("Parses raw DHCP packets", ["src/parser/parse.c", "src/parser/options.c"], "Trace len field through parse_options().", True),
-            ("Configuration loading", ["src/config.c"], "Check file path handling.", False),
-        ], start=1):
-            path = os.path.join(tmp, f"AU-{i}.json")
-            with open(path, "w") as f:
-                json.dump({"description": desc, "files": files, "focus": focus, "analyze": analyze}, f)
+        _write_au(os.path.join(tmp, "AU-1.json"), "Parses raw DHCP packets", ["src/parser/parse.c", "src/parser/options.c"], "Trace len field through parse_options().")
+        _write_au(os.path.join(tmp, "AU-2.json"), "Session management", ["src/session.c"], "Check state transitions.")
 
-        # only_analyze=True: should return only the first AU
-        units = parse_au_files(tmp, only_analyze=True)
-        assert len(units) == 1
+        units = parse_au_files(tmp)
+        assert len(units) == 2
         assert units[0].id == "AU-1"
-
-        # only_analyze=False: should return both
-        all_units = parse_au_files(tmp, only_analyze=False)
-        assert len(all_units) == 2
+        assert units[1].id == "AU-2"
 
 
 def test_stage2_validator_accepts_valid_au_file():
     with tempfile.TemporaryDirectory() as tmp:
         path = os.path.join(tmp, "AU-1.json")
-        with open(path, "w") as f:
-            json.dump({
-                "description": "Parses raw DHCP packets from the network",
-                "files": ["src/parser/parse.c", "src/parser/options.c"],
-                "focus": "Trace the len field from the packet header through parse_options().",
-                "analyze": True,
-            }, f)
+        _write_au(path, "Parses raw DHCP packets from the network", ["src/parser/parse.c", "src/parser/options.c"], "Trace the len field from the packet header through parse_options().")
 
         assert validate_stage2_au_file(path) == []
 
@@ -48,46 +58,67 @@ def test_stage2_validator_rejects_empty_fields():
     with tempfile.TemporaryDirectory() as tmp:
         path = os.path.join(tmp, "AU-1.json")
         with open(path, "w") as f:
-            json.dump({"description": "", "files": [], "focus": "", "analyze": True}, f)
+            json.dump({"description": "", "files": [], "focus": ""}, f)
 
         issues = validate_stage2_au_file(path)
         assert len(issues) == 3  # description, files, focus all blank
 
 
-def test_stage2_validator_rejects_missing_analyze():
-    with tempfile.TemporaryDirectory() as tmp:
-        path = os.path.join(tmp, "AU-1.json")
-        with open(path, "w") as f:
-            json.dump({"description": "desc", "files": ["a.c"], "focus": "focus"}, f)
-
-        issues = validate_stage2_au_file(path)
-        assert len(issues) == 1
-        assert "analyze" in issues[0].description
-
-
 def test_stage2_dir_validator_checks_sequential_ids():
     with tempfile.TemporaryDirectory() as tmp:
+        _write_triage(tmp, [_make_triage_entry("area1", ["a.c"], True)])
         # Write AU-1 and AU-3 (skipping AU-2)
         for n in (1, 3):
-            path = os.path.join(tmp, f"AU-{n}.json")
-            with open(path, "w") as f:
-                json.dump({"description": "d", "files": ["a.c"], "focus": "f", "analyze": True}, f)
+            _write_au(os.path.join(tmp, f"AU-{n}.json"), "d", ["a.c"], "f")
 
         issues = validate_stage2_dir(tmp)
-        seq_issues = [i for i in issues if "sequential" in i.description.lower() or "Non-sequential" in i.description]
+        seq_issues = [i for i in issues if "Non-sequential" in i.description]
         assert len(seq_issues) == 1
 
 
-def test_stage2_dir_validator_rejects_too_many_analyze():
+def test_stage2_dir_validator_rejects_too_many_aus():
     with tempfile.TemporaryDirectory() as tmp:
-        for n in range(1, 53):  # 52 AUs all with analyze: true
-            path = os.path.join(tmp, f"AU-{n}.json")
-            with open(path, "w") as f:
-                json.dump({"description": "d", "files": ["a.c"], "focus": "f", "analyze": True}, f)
+        entries = [_make_triage_entry(f"area{n}", ["a.c"], True) for n in range(1, MAX_ANALYSIS_UNITS + 3)]
+        _write_triage(tmp, entries)
+        for n in range(1, MAX_ANALYSIS_UNITS + 3):
+            _write_au(os.path.join(tmp, f"AU-{n}.json"), "d", ["a.c"], "f")
 
         issues = validate_stage2_dir(tmp)
-        too_many = [i for i in issues if "Too many" in i.description]
-        assert len(too_many) == 1
+        too_many_au = [i for i in issues if "Too many analysis units" in i.description]
+        too_many_triage = [i for i in issues if "too many areas selected" in i.description]
+        assert len(too_many_au) == 1
+        assert len(too_many_triage) == 1
+
+
+def test_stage2_dir_validator_checks_triage_json():
+    with tempfile.TemporaryDirectory() as tmp:
+        _write_au(os.path.join(tmp, "AU-1.json"), "d", ["a.c"], "f")
+        # No triage.json — should produce a validation issue
+        issues = validate_stage2_dir(tmp)
+        triage_issues = [i for i in issues if "triage.json" in i.description]
+        assert len(triage_issues) == 1
+
+
+def test_triage_validator_accepts_valid():
+    with tempfile.TemporaryDirectory() as tmp:
+        path = os.path.join(tmp, "triage.json")
+        with open(path, "w") as f:
+            json.dump([
+                _make_triage_entry("Parsing", ["src/parse.c"], True),
+                _make_triage_entry("Config", ["src/config.c"], False),
+            ], f)
+
+        assert validate_triage_file(path) == []
+
+
+def test_triage_validator_rejects_missing_fields():
+    with tempfile.TemporaryDirectory() as tmp:
+        path = os.path.join(tmp, "triage.json")
+        with open(path, "w") as f:
+            json.dump([{"area": "Parsing"}], f)  # missing files, rationale, selected
+
+        issues = validate_triage_file(path)
+        assert len(issues) == 3  # files, rationale, selected
 
 
 def test_parse_auditing_focus_extracts_sections():

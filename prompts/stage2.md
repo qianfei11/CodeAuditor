@@ -4,7 +4,9 @@ You are performing **Stage 2** of an orchestrated software security audit. Write
 
 ## Your Task
 
-Analyze the project at **__TARGET_PATH__** and decompose it into **analysis units** — self-contained work packages that will each be assigned to an independent sub-agent for security analysis.
+Analyze the project at **__TARGET_PATH__** and decompose it into **analysis units** — self-contained work packages that will each be assigned to an independent sub-agent for in-depth security analysis.
+
+This is a targeted vulnerability hunt, not a comprehensive audit. Your goal is to identify the code areas most likely to contain impactful vulnerabilities and create analysis units only for those areas. Code that is unlikely to be bug-productive should be excluded entirely.
 
 - **Result directory**: `__RESULT_DIR__`
 
@@ -24,37 +26,54 @@ __HISTORICAL_HOT_SPOTS__
 
 ## Workflow
 
-### Step 1: Enumerate Source Files
+### Step 1: Enumerate and Understand
 
 List all source files in **__TARGET_PATH__**. Focus on implementation files (`.c`, `.cpp`, `.go`, `.rs`, `.py`, `.java`, `.ts`, etc.). Exclude: build artifacts, test files (`*_test.*`, `*.test.*`, `test/`, `tests/`), generated code, and third-party vendored dependencies.
-
-### Step 2: Understand the Project
 
 Read key project files to understand the project's purpose and architecture:
 - `README*`, build files (`Makefile`, `CMakeLists.txt`, `go.mod`, `Cargo.toml`, `package.json`, etc.)
 - Directory structure and naming conventions
 - Top-level source files that define the main entry points or architecture
 
-### Step 3: Measure and Decompose
+### Step 2: Triage
 
-Group related source files into analysis units based on what the code **does**, not where it lives. Each unit must have proper code size for a single sub-agent to analyze with sufficient depth. Count the lines of code in the files you are grouping to inform your sizing decisions.
+Group the source files into **functional areas** — coarse groupings based on what the code does (e.g. "protocol parsing", "session management", "authentication", "configuration loading"). Count the approximate lines of code in each area.
 
-**Good split boundaries:**
-- Protocol parsing vs. protocol handling vs. session/state management
-- Different protocol versions or message types
-- Core logic vs. I/O vs. configuration vs. utility code
-- Independent subsystems with minimal coupling
-- Top-level dispatch branches or distinct functional layers
+For each functional area, assess its value for bug hunting. Use the **Auditing Focus** section above as your primary guide:
+- **Respect scope boundaries.** Code explicitly marked out of scope should be excluded. In-scope modules should be prioritized.
+- **Reflect hot spots.** Areas with historical vulnerabilities or known vulnerability patterns are high-priority targets.
+- When the Auditing Focus is empty or states no data is available, use your own judgment based on the code's exposure to untrusted input, complexity, and security sensitivity.
 
-Do not split purely by directory — group by functionality. Do not merge unrelated subsystems into one unit just because they share a directory.
+Write a triage manifest to `__RESULT_DIR__/triage.json` — a JSON array where each entry represents one functional area:
 
-Use the **Auditing Focus** section above to guide decomposition, and:
-- **Respect scope boundaries.** Code that is explicitly out of scope according to the Auditing Focus does not need to be included in any analysis unit. In-scope modules should get tighter, more focused units.
-- **Reflect hot spots in the `focus` field.** When writing an AU that covers a historical hot spot, mention the relevant vulnerability classes and patterns in the `focus` so the downstream analysis agent knows what to prioritize.
+```json
+[
+  {
+    "area": "DHCP packet parsing",
+    "files": ["src/parser/parse.c", "src/parser/options.c"],
+    "loc": 1200,
+    "rationale": "Parses untrusted network input; historical CVE-2024-1234 in this component.",
+    "selected": true
+  },
+  {
+    "area": "Configuration file loading",
+    "files": ["src/config.c"],
+    "loc": 300,
+    "rationale": "Reads local config only, no external input handling.",
+    "selected": false
+  }
+]
+```
 
-If the Auditing Focus section is empty or states that no historical data is available, decompose based purely on code structure and sizing.
+**Selection rules:**
+- At most **30** areas may have `selected` set to `true`.
+- 30 is a hard ceiling, not a target. Select only as many areas as genuinely warrant deep security analysis — this could be 5, 15, or 30 depending on the project.
+- Every selected area will consume one or more sub-agent slots for deep analysis. Be selective: prefer fewer, well-targeted areas over broad but shallow coverage.
+- Every area must have a `rationale` explaining why it was selected or excluded.
 
-### Step 4: Write Output
+### Step 3: Create Analysis Units
+
+For each **selected** area in the triage, create one or more analysis units. If a selected area is too large for a single sub-agent to analyze with sufficient depth, split it into multiple units along natural code boundaries. If it is small enough, one AU per area is fine.
 
 Write **one JSON file per analysis unit** to the result directory:
 - `__RESULT_DIR__/AU-1.json`
@@ -67,30 +86,11 @@ Each file is a self-contained work package:
 {
   "description": "Short description of what this unit covers",
   "files": ["relative/path/to/file1.c", "relative/path/to/file2.c"],
-  "focus": "Concrete analysis guidance: which functions or subsystems are most complex, which code paths handle external input, what data structures are central, which operations are dangerous (memory copies, size arithmetic, state transitions). Be specific enough that a sub-agent can start analysis immediately.",
-  "analyze": true
+  "focus": "Concrete analysis guidance: which functions or subsystems are most complex, which code paths handle external input, what data structures are central, which operations are dangerous (memory copies, size arithmetic, state transitions). Be specific enough that a sub-agent can start analysis immediately."
 }
 ```
 
-Also write a project summary to `__RESULT_DIR__/project-summary.json`:
-
-```json
-{
-  "project_summary": {
-    "path": "__TARGET_PATH__",
-    "name": "project name",
-    "language": "primary language",
-    "description": "Brief description of what the project does"
-  },
-  "au_count": 5
-}
-```
-
-### Step 5: Select Units for Analysis
-
-Review all the analysis units you produced. Select the units that should be included in subsequent deep analysis, based on their security relevance and the Auditing Focus. Set the `analyze` field to `true` for selected units and `false` for units that can be skipped.
-
-No more than **50** units should have `analyze` set to `true`. If you produced more than 50 units, prioritize those covering in-scope modules, historical hot spots, code that handles external input, and security-critical functionality.
+Do not create analysis units for areas that were not selected in the triage.
 
 **Rules:**
 
@@ -101,10 +101,9 @@ No more than **50** units should have `analyze` set to `true`. If you produced m
 ## Completion Checklist
 
 - [ ] All source files enumerated (excluding tests, generated code, third-party deps)
-- [ ] Lines of code counted for each file or file group
-- [ ] Files grouped into analysis units guided by auditing focus and code structure
-- [ ] Each unit has a clear description and specific, actionable focus
-- [ ] `analyze` field set for each unit; no more than 50 units selected
-- [ ] One JSON file per unit written to `__RESULT_DIR__/` as `AU-{N}.json`
-- [ ] Project summary written to `__RESULT_DIR__/project-summary.json`
-- [ ] `au_count` in project summary matches the number of AU files written
+- [ ] Code grouped into functional areas with approximate LOC counts
+- [ ] Each area assessed for bug-hunting value using the Auditing Focus
+- [ ] Triage manifest written to `__RESULT_DIR__/triage.json` with rationale for each area
+- [ ] No more than 30 areas selected; only areas that genuinely warrant deep analysis
+- [ ] AU files created only for selected areas, written as `AU-{N}.json`
+- [ ] Each AU has a clear description and specific, actionable focus

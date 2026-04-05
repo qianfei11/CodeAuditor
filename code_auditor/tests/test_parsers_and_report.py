@@ -7,7 +7,7 @@ import tempfile
 from code_auditor.parsing.stage2 import parse_au_files, parse_auditing_focus
 from code_auditor.report.generate import generate_report
 from code_auditor.validation.stage2 import (
-    MAX_ANALYSIS_UNITS,
+    DEFAULT_MAX_ANALYSIS_UNITS,
     validate_stage2_au_file,
     validate_stage2_dir,
     validate_triage_file,
@@ -78,9 +78,9 @@ def test_stage2_dir_validator_checks_sequential_ids():
 
 def test_stage2_dir_validator_rejects_too_many_aus():
     with tempfile.TemporaryDirectory() as tmp:
-        entries = [_make_triage_entry(f"area{n}", ["a.c"], True) for n in range(1, MAX_ANALYSIS_UNITS + 3)]
+        entries = [_make_triage_entry(f"area{n}", ["a.c"], True) for n in range(1, DEFAULT_MAX_ANALYSIS_UNITS + 3)]
         _write_triage(tmp, entries)
-        for n in range(1, MAX_ANALYSIS_UNITS + 3):
+        for n in range(1, DEFAULT_MAX_ANALYSIS_UNITS + 3):
             _write_au(os.path.join(tmp, f"AU-{n}.json"), "d", ["a.c"], "f")
 
         issues = validate_stage2_dir(tmp)

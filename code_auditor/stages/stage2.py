@@ -35,12 +35,13 @@ async def run_stage2(
         "user_instructions": config.scope or "No additional scope constraints.",
         "scope_modules": scope_modules or "No scope information available.",
         "historical_hot_spots": hot_spots or "No historical data available.",
+        "target_au_count": str(config.target_au_count),
     })
 
     await run_agent(prompt, config, cwd=config.target)
 
     # Validate the output directory
-    issues = validate_stage2_dir(result_dir)
+    issues = validate_stage2_dir(result_dir, max_aus=config.target_au_count)
     if issues:
         logger.warning(
             "Stage 2 validation issues:\n%s", format_validation_issues(issues),
@@ -52,7 +53,7 @@ async def run_stage2(
         )
         await run_agent(repair_prompt, config, cwd=config.target, max_turns=10)
 
-        issues = validate_stage2_dir(result_dir)
+        issues = validate_stage2_dir(result_dir, max_aus=config.target_au_count)
         if issues:
             logger.warning(
                 "Stage 2 validation still has issues after repair:\n%s",

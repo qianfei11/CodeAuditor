@@ -8,7 +8,7 @@ from ..config import ValidationIssue
 
 _PLACEHOLDERS = {"none", "n/a", "...", "tbd", ""}
 
-MAX_ANALYSIS_UNITS = 30
+DEFAULT_MAX_ANALYSIS_UNITS = 30
 
 
 def _is_blank(value: object) -> bool:
@@ -19,7 +19,7 @@ def _is_blank(value: object) -> bool:
     return not value
 
 
-def validate_stage2_dir(result_dir: str) -> list[ValidationIssue]:
+def validate_stage2_dir(result_dir: str, max_aus: int = DEFAULT_MAX_ANALYSIS_UNITS) -> list[ValidationIssue]:
     """Validate the directory of AU-*.json files and triage.json produced by stage 2."""
     issues: list[ValidationIssue] = []
 
@@ -31,7 +31,7 @@ def validate_stage2_dir(result_dir: str) -> list[ValidationIssue]:
         )]
 
     # Validate triage.json
-    issues.extend(validate_triage_file(os.path.join(result_dir, "triage.json")))
+    issues.extend(validate_triage_file(os.path.join(result_dir, "triage.json"), max_aus=max_aus))
 
     # Collect AU files
     pattern = re.compile(r"^AU-(\d+)\.json$")
@@ -59,10 +59,10 @@ def validate_stage2_dir(result_dir: str) -> list[ValidationIssue]:
             ))
 
     # Check total AU count
-    if len(au_files) > MAX_ANALYSIS_UNITS:
+    if len(au_files) > max_aus:
         issues.append(ValidationIssue(
-            description=f"Too many analysis units: {len(au_files)} (max {MAX_ANALYSIS_UNITS}).",
-            expected=f"At most {MAX_ANALYSIS_UNITS} analysis unit files.",
+            description=f"Too many analysis units: {len(au_files)} (max {max_aus}).",
+            expected=f"At most {max_aus} analysis unit files.",
             fix="Reduce the number of analysis units by being more selective in the triage step.",
         ))
 
@@ -127,7 +127,7 @@ def validate_stage2_au_file(file_path: str) -> list[ValidationIssue]:
     return issues
 
 
-def validate_triage_file(file_path: str) -> list[ValidationIssue]:
+def validate_triage_file(file_path: str, max_aus: int = DEFAULT_MAX_ANALYSIS_UNITS) -> list[ValidationIssue]:
     """Validate the triage.json manifest."""
     issues: list[ValidationIssue] = []
 
@@ -205,10 +205,10 @@ def validate_triage_file(file_path: str) -> list[ValidationIssue]:
         elif entry["selected"]:
             selected_count += 1
 
-    if selected_count > MAX_ANALYSIS_UNITS:
+    if selected_count > max_aus:
         issues.append(ValidationIssue(
-            description=f"triage.json: too many areas selected: {selected_count} (max {MAX_ANALYSIS_UNITS}).",
-            expected=f"At most {MAX_ANALYSIS_UNITS} areas with selected: true.",
+            description=f"triage.json: too many areas selected: {selected_count} (max {max_aus}).",
+            expected=f"At most {max_aus} areas with selected: true.",
             fix="Reduce selected areas by being more selective.",
         ))
 

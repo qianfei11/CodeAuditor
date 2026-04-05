@@ -20,6 +20,7 @@ class AuditConfig:
     resume: bool = False
     log_level: str = "INFO"
     model: str = "claude-sonnet-4-6"
+    target_au_count: int = 30
 
 
 @dataclass

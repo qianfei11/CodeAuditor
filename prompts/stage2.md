@@ -66,8 +66,8 @@ Write a triage manifest to `__RESULT_DIR__/triage.json` — a JSON array where e
 ```
 
 **Selection rules:**
-- At most **30** areas may have `selected` set to `true`.
-- 30 is a hard ceiling, not a target. Select only as many areas as genuinely warrant deep security analysis — this could be 5, 15, or 30 depending on the project.
+- At most **__TARGET_AU_COUNT__** areas may have `selected` set to `true`.
+- __TARGET_AU_COUNT__ is a hard ceiling, not a target. Select only areas that are most vulnerability-prone according to the Auditing Focus and genuinely warrant deep security analysis — this could be 5, 15, or __TARGET_AU_COUNT__ depending on the project.
 - Every selected area will consume one or more sub-agent slots for deep analysis. Be selective: prefer fewer, well-targeted areas over broad but shallow coverage.
 - Every area must have a `rationale` explaining why it was selected or excluded.
 
@@ -104,6 +104,6 @@ Do not create analysis units for areas that were not selected in the triage.
 - [ ] Code grouped into functional areas with approximate LOC counts
 - [ ] Each area assessed for bug-hunting value using the Auditing Focus
 - [ ] Triage manifest written to `__RESULT_DIR__/triage.json` with rationale for each area
-- [ ] No more than 30 areas selected; only areas that genuinely warrant deep analysis
+- [ ] No more than __TARGET_AU_COUNT__ areas selected; only areas that genuinely warrant deep analysis
 - [ ] AU files created only for selected areas, written as `AU-{N}.json`
 - [ ] Each AU has a clear description and specific, actionable focus

@@ -40,6 +40,7 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--only-stage", type=int, choices=_ALL_STAGES, default=None,
                         help="Run only this stage (stage 0 always runs for setup)")
     parser.add_argument("--model", default="claude-sonnet-4-6", help="Claude model to use (default: claude-sonnet-4-6)")
+    parser.add_argument("--target-au-count", type=int, default=30, help="Target number of analysis units for stage 2 (default: 30)")
     parser.add_argument("--log-level", default="INFO", choices=["DEBUG", "INFO", "WARNING", "ERROR"])
     return parser
 
@@ -74,6 +75,7 @@ def main() -> None:
         resume=args.resume,
         log_level=args.log_level.upper(),
         model=args.model,
+        target_au_count=args.target_au_count,
     )
 
     configure_logging(config.log_level)

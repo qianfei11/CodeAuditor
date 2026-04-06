@@ -27,8 +27,44 @@ async def run_stage2(
         logger.info("Stage 2 already complete, loading existing output.")
         return parse_au_files(result_dir)
 
+    # On resume, check for intermediate results from a crashed previous run.
+    # The agent may have written AU files before the checkpoint marker was set.
+    if config.resume and parse_au_files(result_dir):
+        logger.info("Stage 2: Found existing intermediate results. Validating.")
+        issues = validate_stage2_dir(result_dir, max_aus=config.target_au_count)
+        if not issues:
+            logger.info("Stage 2: Existing output is valid. Skipping agent re-run.")
+            checkpoint.mark_complete(_TASK_KEY)
+            units = parse_au_files(result_dir)
+            logger.info("Stage 2 complete (restored). Analysis units: %s", ", ".join(u.id for u in units))
+            return units
+        logger.warning(
+            "Stage 2: Existing output has validation issues:\n%s",
+            format_validation_issues(issues),
+        )
+        logger.info("Stage 2: Running repair agent to fix validation issues.")
+        repair_prompt = (
+            f"The analysis unit files in `{result_dir}` failed validation. "
+            "Please fix all issues listed below:\n\n"
+            f"```\n{format_validation_issues(issues)}\n```"
+        )
+        await run_agent(repair_prompt, config, cwd=config.target, max_turns=10)
+        issues = validate_stage2_dir(result_dir, max_aus=config.target_au_count)
+        if not issues:
+            checkpoint.mark_complete(_TASK_KEY)
+            units = parse_au_files(result_dir)
+            logger.info("Stage 2 complete (repaired). Analysis units: %s", ", ".join(u.id for u in units))
+            return units
+        logger.warning(
+            "Stage 2: Repair failed, falling through to full re-run.\n%s",
+            format_validation_issues(issues),
+        )
+
+    logger.info("Stage 2: Starting codebase decomposition (target AU count: %d).", config.target_au_count)
+
     scope_modules, hot_spots = parse_auditing_focus(auditing_focus_path)
 
+    logger.info("Stage 2: Running agent to enumerate, triage, and create analysis units.")
     prompt = load_prompt("stage2.md", {
         "target_path": config.target,
         "result_dir": result_dir,
@@ -40,12 +76,13 @@ async def run_stage2(
 
     await run_agent(prompt, config, cwd=config.target)
 
-    # Validate the output directory
+    logger.info("Stage 2: Agent finished. Validating output.")
     issues = validate_stage2_dir(result_dir, max_aus=config.target_au_count)
     if issues:
         logger.warning(
             "Stage 2 validation issues:\n%s", format_validation_issues(issues),
         )
+        logger.info("Stage 2: Running repair agent to fix validation issues.")
         repair_prompt = (
             f"The analysis unit files in `{result_dir}` failed validation. "
             "Please fix all issues listed below:\n\n"

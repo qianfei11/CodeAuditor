@@ -24,17 +24,20 @@ async def _run_unit(
     checkpoint: CheckpointManager,
     auditing_focus_path: str,
     vuln_criteria_path: str,
+    unit_index: int = 0,
+    total_units: int = 0,
 ) -> list[str]:
     key = _task_key(unit)
     result_dir = os.path.join(config.output_dir, "stage-3-details")
     escaped_id = re.escape(unit.id)
     finding_pattern = re.compile(rf"^{escaped_id}-F-\d+\.json$")
+    progress = f"[{unit_index}/{total_units}]" if total_units else ""
 
     if checkpoint.is_complete(key):
-        logger.info("Stage 3: %s already complete, skipping.", unit.id)
+        logger.info("Stage 3 %s: %s already complete, skipping.", progress, unit.id)
         return list_matching_files(result_dir, finding_pattern)
 
-    logger.info("Stage 3: Starting bug discovery for %s.", unit.id)
+    logger.info("Stage 3 %s: Starting bug discovery for %s.", progress, unit.id)
     prompt = load_prompt("stage3.md", {
         "au_file_path": unit.au_file_path,
         "result_dir": result_dir,
@@ -45,6 +48,7 @@ async def _run_unit(
 
     await run_agent(prompt, config, cwd=config.target)
 
+    logger.info("Stage 3 %s: Agent finished for %s. Validating findings.", progress, unit.id)
     finding_files = list_matching_files(result_dir, finding_pattern)
     for finding_file in finding_files:
         issues = validate_stage3_file(finding_file)
@@ -63,7 +67,7 @@ async def _run_unit(
             logger.warning("Stage 3: Repair failed for %s\n%s", finding_file, format_validation_issues(issues))
 
     checkpoint.mark_complete(key)
-    logger.info("Stage 3: %s complete. Findings: %s", unit.id, len(finding_files))
+    logger.info("Stage 3 %s: %s complete. Findings: %d", progress, unit.id, len(finding_files))
     return finding_files
 
 
@@ -78,10 +82,16 @@ async def run_stage3(
         logger.warning("Stage 3: No analysis units to process.")
         return []
 
+    total = len(units)
+    logger.info("Stage 3: Starting bug discovery across %d analysis units (max parallel: %d).", total, config.max_parallel)
+
     results = await run_parallel_limited(
         units,
         config.max_parallel,
-        lambda unit, _: _run_unit(unit, config, checkpoint, auditing_focus_path, vuln_criteria_path),
+        lambda unit, idx: _run_unit(
+            unit, config, checkpoint, auditing_focus_path, vuln_criteria_path,
+            unit_index=idx + 1, total_units=total,
+        ),
     )
 
     all_finding_files: list[str] = []

@@ -77,13 +77,16 @@ def test_stage2_dir_validator_checks_sequential_ids():
 
 
 def test_stage2_dir_validator_rejects_too_many_aus():
+    # Use max_aus=4 so hard limit is 6; create 7 to exceed it
+    max_aus = 4
+    count = max_aus + max_aus // 2 + 1  # 7, exceeds hard limit of 6
     with tempfile.TemporaryDirectory() as tmp:
-        entries = [_make_triage_entry(f"area{n}", ["a.c"], True) for n in range(1, DEFAULT_MAX_ANALYSIS_UNITS + 3)]
+        entries = [_make_triage_entry(f"area{n}", ["a.c"], True) for n in range(1, count + 1)]
         _write_triage(tmp, entries)
-        for n in range(1, DEFAULT_MAX_ANALYSIS_UNITS + 3):
+        for n in range(1, count + 1):
             _write_au(os.path.join(tmp, f"AU-{n}.json"), "d", ["a.c"], "f")
 
-        issues = validate_stage2_dir(tmp)
+        issues = validate_stage2_dir(tmp, max_aus=max_aus)
         too_many_au = [i for i in issues if "Too many analysis units" in i.description]
         too_many_triage = [i for i in issues if "too many areas selected" in i.description]
         assert len(too_many_au) == 1

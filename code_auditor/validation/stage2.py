@@ -58,11 +58,12 @@ def validate_stage2_dir(result_dir: str, max_aus: int = DEFAULT_MAX_ANALYSIS_UNI
                 fix=f"Rename {name} to AU-{expected_num}.json.",
             ))
 
-    # Check total AU count
-    if len(au_files) > max_aus:
+    # Check total AU count (allow up to 50% over the target before flagging)
+    hard_limit = max_aus + max_aus // 2
+    if len(au_files) > hard_limit:
         issues.append(ValidationIssue(
-            description=f"Too many analysis units: {len(au_files)} (max {max_aus}).",
-            expected=f"At most {max_aus} analysis unit files.",
+            description=f"Too many analysis units: {len(au_files)} (target {max_aus}, hard limit {hard_limit}).",
+            expected=f"At most {hard_limit} analysis unit files (target: {max_aus}).",
             fix="Reduce the number of analysis units by being more selective in the triage step.",
         ))
 
@@ -205,10 +206,11 @@ def validate_triage_file(file_path: str, max_aus: int = DEFAULT_MAX_ANALYSIS_UNI
         elif entry["selected"]:
             selected_count += 1
 
-    if selected_count > max_aus:
+    hard_limit = max_aus + max_aus // 2
+    if selected_count > hard_limit:
         issues.append(ValidationIssue(
-            description=f"triage.json: too many areas selected: {selected_count} (max {max_aus}).",
-            expected=f"At most {max_aus} areas with selected: true.",
+            description=f"triage.json: too many areas selected: {selected_count} (target {max_aus}, hard limit {hard_limit}).",
+            expected=f"At most {hard_limit} areas with selected: true (target: {max_aus}).",
             fix="Reduce selected areas by being more selective.",
         ))
 

@@ -46,20 +46,16 @@ _original_read_messages_impl = _transport.SubprocessCLITransport._read_messages_
 
 async def _patched_connect(self):  # type: ignore[no-untyped-def]
     """Patched connect that forces stderr=PIPE so we can read error output."""
-    # Save the original debug_stderr and extra_args
     orig_debug_stderr = self._options.debug_stderr
-    orig_extra_args = dict(self._options.extra_args)
 
-    # Force stderr capture by setting debug_stderr to PIPE and adding the flag
+    # Capture stderr for error reporting, but do NOT enable debug-to-stderr
+    # to avoid flooding output with Claude Code CLI debug messages.
     self._options.debug_stderr = subprocess.PIPE
-    self._options.extra_args["debug-to-stderr"] = None
 
     try:
         await _original_connect(self)
     finally:
-        # Restore originals so we don't affect other logic
         self._options.debug_stderr = orig_debug_stderr
-        self._options.extra_args = orig_extra_args
 
 
 async def _patched_read_messages_impl(self):  # type: ignore[no-untyped-def]

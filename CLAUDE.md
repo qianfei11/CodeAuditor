@@ -1,6 +1,6 @@
 # CodeAuditor
 
-Multi-stage code auditing agent using `claude-code-sdk` (Python). Given a target project, it researches security context → decomposes the codebase into analysis units → findings → vulnerabilities.
+Multi-stage code auditing agent using `claude-code-sdk` (Python). Given a target project, it researches security context → decomposes the codebase into analysis units → findings → vulnerabilities → PoC reproduction.
 
 ## Quick reference
 
@@ -26,7 +26,7 @@ code-auditor --target /path/to/project [--output-dir DIR] [--max-parallel 2] [--
 #   --resume           Resume from checkpoint markers
 #   --threat-model     Override default threat model text
 #   --scope            Additional scope instructions for stage 1
-#   --skip-stages      Comma-separated stage numbers to skip
+#   --skip-stages      Comma-separated stage numbers to skip (0–5)
 #   --only-stage       Run only this stage (+ stage 0); mutually exclusive with --skip-stages
 #   --model            Claude model to use (default claude-sonnet-4-6)
 #   --target-au-count  Target number of analysis units for stage 2 (default 30)
@@ -55,14 +55,14 @@ code_auditor/
 ├── checkpoint.py        # File/marker-based checkpoint/resume
 ├── logger.py            # stdlib logging wrapper
 ├── utils.py             # run_parallel_limited, file helpers, severity sort
-├── stages/              # stage0–stage4 (one file per stage)
+├── stages/              # stage0–stage5 (one file per stage)
 ├── parsing/             # stage2.py — extract structured data from agent output
-├── validation/          # common.py + stage1–stage4 — validate agent output format
+├── validation/          # common.py + stage1–stage5 — validate agent output format
 └── tests/
-prompts/                 # stage1.md–stage4.md — prompt templates with __KEY__ placeholders
+prompts/                 # stage1.md–stage5.md — prompt templates with __KEY__ placeholders
 ```
 
-## Architecture (5 stages)
+## Architecture (6 stages)
 
 | Stage | What it does | Parallelism |
 |-------|-------------|-------------|
@@ -71,6 +71,7 @@ prompts/                 # stage1.md–stage4.md — prompt templates with __KEY
 | 2 | Decompose project into analysis units (AUs) | Single agent |
 | 3 | Bug discovery per AU | 1 agent per AU |
 | 4 | Evaluate findings: real vuln? severity? | 1 agent per finding |
+| 5 | PoC reproduction: build, exploit, capture evidence | 1 agent per vuln |
 
 ## Key patterns
 

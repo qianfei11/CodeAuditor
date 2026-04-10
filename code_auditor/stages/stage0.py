@@ -58,6 +58,7 @@ async def run_setup(config: AuditConfig) -> None:
         os.path.join(config.output_dir, "stage-3-details"),
         os.path.join(config.output_dir, "stage-4-details"),
         os.path.join(config.output_dir, "stage-4-details", "_pending"),
+        os.path.join(config.output_dir, "stage-5-details"),
     ]
 
     for directory in directories:

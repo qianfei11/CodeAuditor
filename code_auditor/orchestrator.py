@@ -11,6 +11,7 @@ from .stages.stage1 import Stage1Output, run_stage1
 from .stages.stage2 import run_stage2
 from .stages.stage3 import run_stage3
 from .stages.stage4 import run_stage4
+from .stages.stage5 import run_stage5
 from .utils import list_json_files
 
 logger = get_logger("orchestrator")
@@ -75,9 +76,18 @@ async def run_audit(config: AuditConfig) -> None:
         bug_files = list_json_files(os.path.join(config.output_dir, "stage-3-details"))
 
     # Stage 4: evaluate findings
+    vuln_files: list[str] = []
     if 4 not in config.skip_stages:
-        await run_stage4(bug_files, config, checkpoint, vuln_criteria_path)
+        vuln_files = await run_stage4(bug_files, config, checkpoint, vuln_criteria_path)
     else:
         logger.info("Stage 4 skipped.")
+        stage4_dir = os.path.join(config.output_dir, "stage-4-details")
+        vuln_files = [f for f in list_json_files(stage4_dir) if "_pending" not in f]
+
+    # Stage 5: PoC reproduction per verified vulnerability
+    if 5 not in config.skip_stages:
+        await run_stage5(vuln_files, config, checkpoint)
+    else:
+        logger.info("Stage 5 skipped.")
 
     logger.info("Audit complete.")

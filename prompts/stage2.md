@@ -69,6 +69,7 @@ Write a triage manifest to `__RESULT_DIR__/triage.json` — a JSON array where e
 - At most **__TARGET_AU_COUNT__** areas may have `selected` set to `true`.
 - __TARGET_AU_COUNT__ is a hard ceiling, not a target. Select only areas that are most vulnerability-prone according to the Auditing Focus and genuinely warrant deep security analysis — this could be 5, 15, or __TARGET_AU_COUNT__ depending on the project.
 - Every selected area will consume one or more sub-agent slots for deep analysis. Be selective: prefer fewer, well-targeted areas over broad but shallow coverage.
+- **Exclude modules not in default compilation or default runtime configuration.** If a module is only compiled when a non-default build flag, feature gate, or `./configure` option is enabled, or only loaded/activated through non-default runtime configuration, mark it `selected: false`.
 - Every area must have a `rationale` explaining why it was selected or excluded.
 
 ### Step 3: Create Analysis Units

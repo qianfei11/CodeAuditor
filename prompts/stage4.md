@@ -31,13 +31,13 @@ Read the relevant source code at the target project path. Before making any verd
 
 ### Step 3: Assess Pre-Requisites
 
-Before scoring severity, determine the exact conditions required to trigger the vulnerability:
+Before scoring severity, determine if there are non-default configurations required to trigger the vulnerability:
 
 - **Compile-time flags**: Is the vulnerable code path only compiled in when a non-default or rarely-used flag is set (e.g., `#ifdef ENABLE_LEGACY_FEATURE`, an optional CMake/configure flag not enabled in typical builds)?
 - **Runtime configuration**: Does triggering the vulnerability require a non-default configuration option that is unlikely to be enabled in real-world deployments?
 - **Environment assumptions**: Does exploitation depend on an atypical deployment topology, hardware, or operating mode?
 
-If the vulnerability requires a non-default compile flag or non-default runtime configuration that is uncommon in real-world deployments, cap its severity at **Medium** regardless of the theoretical impact. Document this constraint explicitly in the prerequisites field. The rationale: a vulnerability that most installations never expose is structurally less severe than one present in all default builds.
+If the vulnerability requires a non-default compile flag or non-default runtime configuration, cap its severity at **Medium** regardless of the theoretical impact. Document this constraint explicitly in the prerequisites field.
 
 ### Step 4: Assess Impact and CVSS Score
 

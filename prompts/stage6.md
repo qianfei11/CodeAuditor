@@ -183,9 +183,9 @@ Subject: [Security] <concise description of the vulnerability>
 
 Hi,
 
-<Opening paragraph: identify yourself/your role, state that you are
-reporting a security vulnerability in [project name], and briefly
-describe the affected component.>
+<Opening paragraph: state that you are reporting a security
+vulnerability in [project name], and briefly describethe affected
+component.>
 
 <Affected versions paragraph: state which versions and modules are
 known to be affected.>

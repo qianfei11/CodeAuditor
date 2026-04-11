@@ -5,7 +5,7 @@ import json
 from ..config import ValidationIssue
 from .common import read_file_or_issues
 
-_REQUIRED_KEYS = ["id", "title", "location", "data_flow_trace", "cwe_id", "vulnerability_class", "cvss_score"]
+_REQUIRED_KEYS = ["id", "title", "location", "data_flow_trace", "cwe_id", "vulnerability_class", "trigger", "cvss_score"]
 
 _DATA_FLOW_TRACE_KEYS = ["entry_point", "propagation_chain", "neutralizing_checks", "sink"]
 

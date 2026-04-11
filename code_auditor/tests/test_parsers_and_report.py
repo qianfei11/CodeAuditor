@@ -169,6 +169,7 @@ def test_stage4_validator_accepts_valid_finding():
                 "vulnerability_class": ["integer underflow"],
                 "cvss_score": "8.1",
                 "severity": "High",
+                "trigger": "Send a crafted packet with a 2-byte length field smaller than header_size, causing an integer underflow in the memcpy size argument",
                 "prerequisites": "Default configuration",
                 "impact": "DoS",
                 "code_snippet": "memcpy(...)",

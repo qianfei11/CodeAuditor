@@ -42,6 +42,6 @@ For each confirmed vulnerability, write one JSON file to `__RESULT_DIR__/` named
 4. `finding_id` must match the `F-{NN}` pattern from the filename.
 5. One finding per file.
 
-**Do not report issues that require non-default configuration.** If a potential vulnerability can only be triggered when the software is compiled with a non-default build flag, feature gate, or `./configure` option, or when a non-default runtime configuration option is enabled, it is out of scope. Only report vulnerabilities that are reachable under default compilation and default runtime configuration.
+**Do not report issues that require non-default configuration.** If a potential vulnerability can only be triggered when the software is compiled with a non-default build flag (32-bit compilation is considered a non-default configuration), feature gate, or `./configure` option, or when a non-default runtime configuration option is enabled, it is out of scope. Only report vulnerabilities that are reachable under default compilation and default runtime configuration.
 
 If no vulnerabilities are found, write no files.

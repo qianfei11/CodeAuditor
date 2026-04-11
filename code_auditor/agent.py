@@ -110,50 +110,73 @@ async def run_agent(
     cwd: str,
     allowed_tools: list[str] | None = None,
     max_turns: int = 30,
+    model: str | None = None,
+    effort: str | None = None,
+    log_file: str | None = None,
 ) -> str:
     tools = allowed_tools or DEFAULT_TOOLS
     add_dirs = _additional_directories(config, cwd)
+
+    extra_args: dict[str, str | None] = {
+        # Run sub-agents like a clean Claude Code install: no user/project
+        # settings, no plugins, no hooks, no CLAUDE.md, no slash commands.
+        "setting-sources": "",
+        "disable-slash-commands": None,
+    }
+    if effort:
+        extra_args["effort"] = effort
 
     options = ClaudeCodeOptions(
         allowed_tools=tools,
         permission_mode="bypassPermissions",
         max_turns=max_turns,
-        model=config.model,
+        model=model or config.model,
         cwd=cwd,
         add_dirs=add_dirs,
-        extra_args={
-            # Run sub-agents like a clean Claude Code install: no user/project
-            # settings, no plugins, no hooks, no CLAUDE.md, no slash commands.
-            "setting-sources": "",
-            "disable-slash-commands": None,
-        },
+        extra_args=extra_args,
     )
 
-    last_exc: Exception | None = None
-    for attempt in range(AGENT_MAX_RETRIES):
-        try:
-            text_parts: list[str] = []
-            async for message in query(prompt=prompt, options=options):
-                if message is None:
-                    continue
-                if hasattr(message, "content"):
-                    for block in message.content:
-                        if hasattr(block, "text"):
-                            text_parts.append(block.text)
-            return "\n".join(text_parts)
-        except Exception as exc:
-            last_exc = exc
-            if attempt < AGENT_MAX_RETRIES - 1:
-                delay = AGENT_RETRY_BASE_DELAY * (2 ** attempt)
-                logger.warning(
-                    "Agent call failed (attempt %d/%d), retrying in %ds: %s",
-                    attempt + 1, AGENT_MAX_RETRIES, delay, exc,
-                )
-                await asyncio.sleep(delay)
-            else:
-                logger.error("Agent call failed after %d attempts: %s", AGENT_MAX_RETRIES, exc)
+    log_fh = None
+    if log_file:
+        os.makedirs(os.path.dirname(log_file), exist_ok=True)
+        log_fh = open(log_file, "w")  # noqa: SIM115
 
-    raise last_exc  # type: ignore[misc]
+    last_exc: Exception | None = None
+    try:
+        for attempt in range(AGENT_MAX_RETRIES):
+            try:
+                text_parts: list[str] = []
+                if log_fh and attempt > 0:
+                    log_fh.write(f"\n--- retry attempt {attempt + 1} ---\n\n")
+                    log_fh.flush()
+                async for message in query(prompt=prompt, options=options):
+                    if message is None:
+                        continue
+                    if hasattr(message, "content"):
+                        for block in message.content:
+                            if hasattr(block, "text"):
+                                text_parts.append(block.text)
+                                if log_fh:
+                                    log_fh.write(block.text)
+                                    log_fh.write("\n")
+                                    log_fh.flush()
+                return "\n".join(text_parts)
+            except Exception as exc:
+                last_exc = exc
+                if attempt < AGENT_MAX_RETRIES - 1:
+                    delay = AGENT_RETRY_BASE_DELAY * (2 ** attempt)
+                    logger.warning(
+                        "Agent call failed (attempt %d/%d), retrying in %ds: %s",
+                        attempt + 1, AGENT_MAX_RETRIES, delay, exc,
+                    )
+                    await asyncio.sleep(delay)
+                else:
+                    logger.error("Agent call failed after %d attempts: %s", AGENT_MAX_RETRIES, exc)
+
+        raise last_exc  # type: ignore[misc]
+    finally:
+        if log_fh and not log_fh.closed:
+            log_fh.close()
 
 
 async def run_with_validation(
@@ -166,9 +189,11 @@ async def run_with_validation(
     allowed_tools: list[str] | None = None,
     max_turns: int = 30,
     skip_if_missing: bool = False,
+    model: str | None = None,
+    effort: str | None = None,
 ) -> tuple[bool, str]:
     """Run agent then validate output, retrying on failure. Returns (passed, result)."""
-    result = await run_agent(prompt, config, cwd, allowed_tools, max_turns)
+    result = await run_agent(prompt, config, cwd, allowed_tools, max_turns, model=model, effort=effort)
 
     for attempt in range(max_retries + 1):
         if skip_if_missing and not os.path.exists(output_path):

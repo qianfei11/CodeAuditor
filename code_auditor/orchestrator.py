@@ -32,15 +32,6 @@ async def run_audit(config: AuditConfig) -> None:
     if 1 not in config.skip_stages:
         stage1_out = await run_stage1(config, checkpoint)
 
-    # Pause for user review before continuing (skip when resuming a completed stage 1)
-    stage1_was_cached = config.resume and checkpoint.is_complete("stage1")
-    if not stage1_was_cached and 1 not in config.skip_stages and not all(s in config.skip_stages for s in range(2, 5)):
-        details_dir_preview = os.path.join(config.output_dir, "stage-1-details")
-        logger.info(
-            "Stage 1 complete. Review generated files in: %s", details_dir_preview
-        )
-        input("\nPress Enter to continue to the next stages...")
-
     # Resolve directive paths (from stage1 output or default locations)
     details_dir = os.path.join(config.output_dir, "stage-1-details")
     auditing_focus_path = (

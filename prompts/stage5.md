@@ -51,11 +51,13 @@ Answer three questions:
 
 1. **Attack vector** — How does an attacker reach the vulnerable code in practice? Remote/network, local input (crafted file), authenticated, or adjacent?
 
-2. **Attacker position** — What is the most realistic *and* most dangerous position? Examples: a server parser bug → remote unauthenticated client, not a local config file. A library TLS bug → network traffic against a server using the library, not a direct API call.
+2. **Attacker position** — What is the most realistic *and* most dangerous position? Examples: a server parser bug → remote unauthenticated client; a CLI tool bug → local user that provides malicious input.
 
 3. **PoC interaction model** — Network-based (connect and send crafted packets), file-based (crafted input fed to the target), or API-based (harness simulating real deployment)?
 
 Always prefer **maximum impact**: remote over local, unauthenticated over authenticated, pre-auth over post-auth.
+
+**do not over claim:** if the target is a library or a CLI tool, do not assume remote exploitation unless there is a realistic attack vector.
 
 #### 1.2 Verification Target
 
@@ -110,7 +112,22 @@ If the PoC does not trigger as expected, iterate:
 3. Revisit build configuration if needed — rebuild with different flags or instrumentation.
 4. Continue until the vulnerability triggers with clear evidence, or conclude it cannot be reproduced.
 
-### Step 4: Generate the Report
+### Step 4: Real-World Exploitability Assessment
+
+**Goal**: After the PoC triggers the vulnerability, critically assess whether the attack scenario is realistic under the default deployment of the target:
+
+- **Timing / race windows**: Does the attack require hitting a window so small it is impractical without co-located privileged access?
+- **Input size / shape**: Does the attack require inputs that a default deployment would reject or never accept (e.g., a multi-GB request body against a server with a 1 MB default limit, a filename longer than the OS permits)?
+- **Non-default configuration**: Does triggering require flags, options, or build settings that are off by default and rarely enabled in production?
+- **Privileged precondition**: Does the attacker need capabilities (local code execution, filesystem write, elevated privileges) that already exceed the impact of the bug?
+- **Environmental assumptions**: Does the PoC rely on specific heap layouts, debug builds, disabled mitigations (ASLR/NX/stack canaries), memory pressure, or unusual toolchains?
+- **User interaction**: Does the attack require an implausible sequence of victim actions?
+
+If **any** such unrealistic requirement is load-bearing for the exploit, mark the finding as a **false-positive** and set `Reproduction Status: false-positive` in the report. Document the specific unrealistic requirement(s) in the report's Observed Result / Pre-requisites sections so the reasoning is transparent.
+
+If the attack remains realistic under default deployment (even if it requires crafted but plausible input), proceed to Step 5 with `reproduced` or `partially-reproduced`.
+
+### Step 5: Generate the Report
 
 **Goal**: Produce a working-level report capturing findings and evidence.
 
@@ -121,6 +138,7 @@ Write `__POC_DIR__/report.md` containing:
 - **Summary**: One paragraph — what the vulnerability is, where it occurs, and its impact
 - **Severity**: CWE classification and CVSS v3.1 score with brief justification
 - **Pre-requisites**: Non-default configuration needed, or "default configuration"
+- **Trigger**: Brief description of how the attacker triggers the vulnerability: what malicious input they craft and how it is delivered
 - **Security Impact**: What an attacker could achieve and under what conditions
 - **Root Cause**: Annotated code snippets tracing attacker input to the vulnerability, with explanation of where validation is missing
 - **Reproduction Steps**: Exact commands to build the target, start it, and run the PoC — detailed enough for an independent party to reproduce from only this report and the PoC artifacts
@@ -129,7 +147,7 @@ Write `__POC_DIR__/report.md` containing:
 
 The report must be accurate. Every claim must be supported by evidence. Do not extrapolate or speculate beyond what the evidence shows.
 
-### Step 5: Handle Failed Reproduction
+### Step 6: Handle Failed Reproduction
 
 If your final reproduction status is `not-reproduced` or `false-positive`, rename the PoC artifacts directory by appending a `_fp` suffix. For example, if your artifacts are in `__POC_DIR__`, run:
 

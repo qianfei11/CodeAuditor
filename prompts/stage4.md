@@ -39,7 +39,7 @@ Before scoring severity, determine if there are non-default configurations requi
 
 **how the attacker crafts malicious input is not included as a pre-requisite**
 
-If the vulnerability requires a non-default compile flag or non-default runtime configuration, cap its severity at **Medium** regardless of the theoretical impact. Document this constraint explicitly in the prerequisites field.
+**IMPORTANT:** If the vulnerability requires a non-default compile flag or non-default runtime configuration, cap its severity at **Medium** regardless of the theoretical impact. Document this constraint explicitly in the prerequisites field.
 
 ### Step 4: Analyze Attacker Trigger
 

@@ -105,7 +105,7 @@ If the minimal PoC fails to trigger, investigate, fix, re-validate, and iterate 
 
 Create `__DISCLOSURE_DIR__/report.md`. Do not modify the original report. The disclosure report must meet the following requirements:
 
-1. **Verify all statements and claims**: Review every technical claim in the original report for accuracy and consistency. Correct any errors or inconsistencies.
+1. **Verify all statements and claims**: Review every technical claim in the original report for accuracy and consistency. Correct any errors or inconsistencies. Do not overclaim about the security impact or include unconfirmed details (e.g,., do not assume network exploitation is the target is a local program).
 
 2. **Update reproduction steps**: Ensure the "Steps to Reproduce" section references the minimal PoC files and includes exact commands to run them.
 
@@ -185,7 +185,7 @@ Hi,
 
 <Opening paragraph: state that you are reporting a security
 vulnerability in [project name], and briefly describethe affected
-component.>
+component. e.g., "I'm writing to report a ...">
 
 <Affected versions paragraph: state which versions and modules are
 known to be affected.>
@@ -203,8 +203,7 @@ buffer overflow").>
 <Closing: offer to provide further details, coordinate on disclosure
 timeline, and provide contact information.>
 
-Regards,
-<name / handle>
+Regards
 ```
 
 **Step 4 checkpoint** — before proceeding, verify:

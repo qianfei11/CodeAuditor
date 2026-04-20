@@ -6,6 +6,12 @@ You are performing **Stage 4** of an orchestrated software security audit. Write
 
 Before starting analysis, read the auditing focus at `__AUDITING_FOCUS_PATH__` and the vulnerability criteria at `__VULN_CRITERIA_PATH__`. The auditing focus tells you which components deserve the closest scrutiny. The vulnerability criteria define what distinguishes a vulnerability from a bug. Use this context to focus your analysis on reachable, exploitable issues.
 
+## Real-World Reachability Context
+
+The deployment archetypes below describe how this code is run in production. When evaluating a candidate bug, prefer ones reachable from these deployment entry points. A bug only reachable from code that runs in no archetype is lower-confidence.
+
+__DEPLOYMENT_SUMMARY__
+
 Read your analysis unit file at `__AU_FILE_PATH__`. It describes the codebase you are assigned to and provides the context you need to start your analysis.
 
 ### Scope of Your Analysis

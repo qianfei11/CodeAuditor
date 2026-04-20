@@ -73,7 +73,7 @@ async def run_audit(config: AuditConfig) -> None:
     if 4 not in config.skip_stages:
         bug_files = await run_stage4(
             analysis_units, config, checkpoint,
-            auditing_focus_path, vuln_criteria_path,
+            auditing_focus_path, vuln_criteria_path, deployment_summary_path,
         )
     else:
         logger.info("Stage 4 skipped.")

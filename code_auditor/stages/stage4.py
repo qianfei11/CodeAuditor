@@ -24,6 +24,7 @@ async def _run_unit(
     checkpoint: CheckpointManager,
     auditing_focus_path: str,
     vuln_criteria_path: str,
+    deployment_summary_path: str,
     unit_index: int = 0,
     total_units: int = 0,
 ) -> list[str]:
@@ -39,12 +40,18 @@ async def _run_unit(
         return list_matching_files(result_dir, finding_pattern)
 
     logger.info("Stage 4 %s: Starting bug discovery for %s.", progress, unit.id)
+    deployment_summary = ""
+    if os.path.exists(deployment_summary_path):
+        with open(deployment_summary_path) as f:
+            deployment_summary = f.read().strip()
+
     prompt = load_prompt("stage4.md", {
         "au_file_path": unit.au_file_path,
         "result_dir": result_dir,
         "finding_prefix": unit.id,
         "auditing_focus_path": auditing_focus_path,
         "vuln_criteria_path": vuln_criteria_path,
+        "deployment_summary": deployment_summary or "No deployment summary available.",
     })
 
     await run_agent(prompt, config, cwd=config.target, max_turns=200, log_file=log_file)
@@ -78,6 +85,7 @@ async def run_stage4(
     checkpoint: CheckpointManager,
     auditing_focus_path: str,
     vuln_criteria_path: str,
+    deployment_summary_path: str,
 ) -> list[str]:
     if not units:
         logger.warning("Stage 4: No analysis units to process.")
@@ -91,6 +99,7 @@ async def run_stage4(
         config.max_parallel,
         lambda unit, idx: _run_unit(
             unit, config, checkpoint, auditing_focus_path, vuln_criteria_path,
+            deployment_summary_path,
             unit_index=idx + 1, total_units=total,
         ),
     )

@@ -16,21 +16,18 @@ Multi-stage code auditing agent using `claude-code-sdk` (Python). Given a target
 pip install -e .
 
 # Run an audit
-code-auditor --target /path/to/project [--output-dir DIR] [--max-parallel 2] [--resume] [--skip-stages 0,4] [--log-level DEBUG]
+code-auditor --target /path/to/project [--output-dir DIR] [--max-parallel 1] [--log-level DEBUG]
 
 # Required args
-#   --target           Root directory of project to audit
+#   --target                         Root directory of project to audit
 # Optional args
-#   --output-dir       Defaults to {target}/audit-output
-#   --max-parallel     Concurrent agents (default 2)
-#   --resume           Resume from checkpoint markers
-#   --threat-model     Override default threat model text
-#   --scope            Additional scope instructions for stage 1
-#   --skip-stages      Comma-separated stage numbers to skip (0–6)
-#   --only-stage       Run only this stage (+ stage 0); mutually exclusive with --skip-stages
-#   --model            Claude model to use (default claude-sonnet-4-6)
-#   --target-au-count  Target number of analysis units for stage 2 (default 30)
-#   --log-level        DEBUG|INFO|WARNING|ERROR (default INFO)
+#   --output-dir                     Defaults to {target}/audit-output
+#   --max-parallel                   Concurrent agents (default 1)
+#   --model                          Claude model to use (default claude-sonnet-4-6)
+#   --target-au-count                Target number of analysis units for stage 3 (default 10)
+#   --deployment-build-parallel      Max concurrent stage-2 build agents (default 1)
+#   --deployment-build-timeout-sec   Wall-clock seconds per stage-2 build agent (default 1800)
+#   --log-level                      DEBUG|INFO|WARNING|ERROR (default INFO)
 ```
 
 ## Testing
@@ -55,30 +52,31 @@ code_auditor/
 ├── checkpoint.py        # File/marker-based checkpoint/resume
 ├── logger.py            # stdlib logging wrapper
 ├── utils.py             # run_parallel_limited, file helpers, severity sort
-├── stages/              # stage0–stage6 (one file per stage)
+├── stages/              # stage0–stage7 (one file per stage)
 ├── parsing/             # stage2.py — extract structured data from agent output
-├── validation/          # common.py + stage1–stage6 — validate agent output format
+├── validation/          # common.py + stage1–stage7 — validate agent output format
 └── tests/
-prompts/                 # stage1.md–stage6.md — prompt templates with __KEY__ placeholders
+prompts/                 # stage1.md, stage2.md, stage2-build.md, stage3.md–stage7.md — prompt templates with __KEY__ placeholders
 ```
 
-## Architecture (7 stages)
+## Architecture (8 stages)
 
 | Stage | What it does | Parallelism |
-|-------|-------------|-------------|
-| 0 | Git pull + create output dirs | None (pure fs) |
-| 1 | Security context research (git, web, SECURITY.md) | Single agent |
-| 2 | Decompose project into analysis units (AUs) | Single agent |
-| 3 | Bug discovery per AU | 1 agent per AU |
-| 4 | Evaluate findings: real vuln? severity? | 1 agent per finding |
-| 5 | PoC reproduction: build, exploit, capture evidence | 1 agent per vuln |
-| 6 | Disclosure: report, email, minimal PoC, zip package | 1 agent per vuln |
+|-------|--------------|-------------|
+| 0 | Git pull + create output directories | None |
+| 1 | Security context research (git history, web, `SECURITY.md`) | Single agent |
+| 2 | Deployment realization: research production deployments + build instrumented artifacts | Single research agent + N parallel build agents |
+| 3 | Decompose the project into analysis units (AUs) | Single agent |
+| 4 | Bug discovery per analysis unit | 1 agent per AU |
+| 5 | Evaluate findings: real vulnerability? severity? | 1 agent per finding |
+| 6 | PoC reproduction: launch a pre-built deployment + exploit + capture evidence | 1 agent per vulnerability |
+| 7 | Disclosure: technical report, email, minimal PoC, zipped package | 1 agent per vulnerability |
 
 ## Key patterns
 
 - **Prompt templates**: `prompts/stageN.md` with `__KEY__` placeholders, loaded via `prompts.py:load_prompt()`
-- **Directive injection**: Stage 1 produces auditing focus and vulnerability criteria directives; injected into Stage 2 (scope/hot-spots), Stage 3 (both), and Stage 4 (vuln criteria only)
+- **Directive injection**: Stage 1 produces auditing focus and vulnerability criteria directives; Stage 2 produces a deployment summary. Stage 3 receives auditing focus + vulnerability criteria + deployment summary; Stage 4 receives vulnerability criteria + deployment summary; Stage 6 receives the deployment summary (plus the deployment manifest path) to pick a pre-built deployment for PoC reproduction.
 - **Validation + retry**: Each agent output is validated; on failure, a repair prompt is sent (up to `max_retries`)
-- **Checkpoint/resume**: `.markers/` directory tracks completed sub-tasks; `--resume` skips them
+- **Checkpoint/resume**: `.markers/` directory tracks completed sub-tasks; resume is automatic
 - **Parallel agents**: `utils.run_parallel_limited()` uses `asyncio.Semaphore` + `gather`
-- **Output dir layout**: `{output}/stage{1-security-context,2-analysis-units,3-findings,4-vulnerabilities,5-pocs,6-disclosures}/`, `.markers/`
+- **Output dir layout**: `{output}/stage1-security-context/`, `stage2-deployments/`, `stage3-analysis-units/`, `stage4-findings/`, `stage5-vulnerabilities/`, `stage6-pocs/`, `stage7-disclosures/`, `.markers/`

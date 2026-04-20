@@ -688,3 +688,42 @@ def test_merge_results_preserves_phase_a_entries_with_no_result_dir():
         assert {c["id"] for c in merged["configs"]} == {"a", "b"}
         for c in merged["configs"]:
             assert c["build_status"] == "infeasible"
+
+
+from code_auditor.stages.stage2_deployments import (
+    Stage2Output,
+    DeploymentConfig,
+    load_stage2_output,
+)
+
+
+def test_load_stage2_output_filters_to_ok_only():
+    with tempfile.TemporaryDirectory() as tmp:
+        manifest_path = _phase_a_manifest_at(tmp, ["a", "b"])
+        # Make 'a' ok, 'b' infeasible.
+        with open(manifest_path) as f:
+            data = json.load(f)
+        for c in data["configs"]:
+            if c["id"] == "a":
+                c["build_status"] = "ok"
+                c["artifact_path"] = "/tmp/a"
+                c["launch_cmd"] = "/tmp/a-launch"
+            else:
+                c["build_status"] = "infeasible"
+                c["build_failure_reason"] = "x"
+                c["attempts_summary"] = "y"
+        with open(manifest_path, "w") as f:
+            json.dump(data, f)
+
+        # deployment-summary.md needed for path-checking
+        with open(os.path.join(tmp, "deployment-summary.md"), "w") as f:
+            f.write("summary")
+
+        out = load_stage2_output(tmp)
+        assert isinstance(out, Stage2Output)
+        assert out.manifest_path == manifest_path
+        assert out.deployment_summary_path.endswith("deployment-summary.md")
+        assert len(out.configs) == 1
+        assert out.configs[0].id == "a"
+        assert out.configs[0].artifact_path == "/tmp/a"
+        assert out.configs[0].launch_cmd == "/tmp/a-launch"

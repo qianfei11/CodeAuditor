@@ -97,3 +97,29 @@ def merge_results_into_manifest(deployments_dir: str) -> None:
             entry[field] = data.get(field)
 
     _save_manifest(manifest_path, manifest)
+
+
+def load_stage2_output(deployments_dir: str) -> Stage2Output:
+    """Read a merged manifest and return only the entries with build_status == 'ok'."""
+    manifest_path = os.path.join(deployments_dir, "manifest.json")
+    summary_path = os.path.join(deployments_dir, "deployment-summary.md")
+    manifest = _load_manifest(manifest_path)
+
+    configs: list[DeploymentConfig] = []
+    for entry in manifest.get("configs", []):
+        if entry.get("build_status") != "ok":
+            continue
+        configs.append(DeploymentConfig(
+            id=entry["id"],
+            name=entry.get("name", ""),
+            deployment_mode_path=os.path.join(deployments_dir, entry.get("deployment_mode_path", "")),
+            exposed_surface=list(entry.get("exposed_surface", [])),
+            modules_exercised=list(entry.get("modules_exercised", [])),
+            artifact_path=entry.get("artifact_path"),
+            launch_cmd=entry.get("launch_cmd"),
+        ))
+    return Stage2Output(
+        manifest_path=manifest_path,
+        deployment_summary_path=summary_path,
+        configs=configs,
+    )

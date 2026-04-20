@@ -27,3 +27,6 @@ audit-output/
 
 bak/
 working/
+
+# Git worktrees
+.worktrees/

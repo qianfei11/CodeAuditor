@@ -585,3 +585,106 @@ def test_validate_stage2_manifest_final_missing_file():
     issues = validate_stage2_manifest_final("/nonexistent/manifest.json")
     assert any("manifest.json" in i.description.lower() for i in issues)
 
+
+from code_auditor.stages.stage2_deployments import merge_results_into_manifest
+
+
+def _phase_a_manifest_at(deployments_dir: str, ids: list[str]) -> str:
+    os.makedirs(os.path.join(deployments_dir, "configs"), exist_ok=True)
+    configs = [_phase_a_config(i) for i in ids]
+    for cfg in configs:
+        cfg["deployment_mode_path"] = f"configs/{cfg['id']}/deployment-mode.md"
+    manifest_path = os.path.join(deployments_dir, "manifest.json")
+    with open(manifest_path, "w") as f:
+        json.dump({"configs": configs}, f)
+    return manifest_path
+
+
+def _write_result(deployments_dir: str, cfg_id: str, result: dict) -> None:
+    cfg_dir = os.path.join(deployments_dir, "configs", cfg_id)
+    os.makedirs(cfg_dir, exist_ok=True)
+    with open(os.path.join(cfg_dir, "result.json"), "w") as f:
+        json.dump(result, f)
+
+
+def test_merge_results_promotes_ok():
+    with tempfile.TemporaryDirectory() as tmp:
+        manifest_path = _phase_a_manifest_at(tmp, ["a", "b"])
+        artifact_a = os.path.join(tmp, "configs", "a", "build", "binA")
+        os.makedirs(os.path.dirname(artifact_a), exist_ok=True)
+        with open(artifact_a, "w") as f:
+            f.write("x")
+        for name in ("build.sh", "launch.sh", "smoke-test.sh"):
+            p = os.path.join(tmp, "configs", "a", name)
+            with open(p, "w") as f:
+                f.write("#!/bin/sh\n")
+            os.chmod(p, 0o755)
+        _write_result(tmp, "a", {
+            "id": "a",
+            "build_status": "ok",
+            "artifact_path": artifact_a,
+            "launch_cmd": f"{tmp}/configs/a/launch.sh",
+            "build_failure_reason": None,
+            "attempts_summary": None,
+        })
+        _write_result(tmp, "b", {
+            "id": "b",
+            "build_status": "infeasible",
+            "artifact_path": None,
+            "launch_cmd": None,
+            "build_failure_reason": "missing libfoo, no apt package available",
+            "attempts_summary": "tried apt search libfoo; not packaged for this distro.",
+        })
+        merge_results_into_manifest(tmp)
+
+        with open(manifest_path) as f:
+            merged = json.load(f)
+        by_id = {c["id"]: c for c in merged["configs"]}
+        assert by_id["a"]["build_status"] == "ok"
+        assert by_id["a"]["artifact_path"] == artifact_a
+        assert by_id["b"]["build_status"] == "infeasible"
+        assert by_id["b"]["build_failure_reason"]
+
+
+def test_merge_results_downgrades_missing_result_json_to_infeasible():
+    with tempfile.TemporaryDirectory() as tmp:
+        manifest_path = _phase_a_manifest_at(tmp, ["a"])
+        os.makedirs(os.path.join(tmp, "configs", "a"), exist_ok=True)
+        # No result.json written.
+        merge_results_into_manifest(tmp)
+
+        with open(manifest_path) as f:
+            merged = json.load(f)
+        a = merged["configs"][0]
+        assert a["build_status"] == "infeasible"
+        assert "result.json" in (a["build_failure_reason"] or "")
+
+
+def test_merge_results_downgrades_malformed_result_to_infeasible():
+    with tempfile.TemporaryDirectory() as tmp:
+        manifest_path = _phase_a_manifest_at(tmp, ["a"])
+        cfg_dir = os.path.join(tmp, "configs", "a")
+        os.makedirs(cfg_dir, exist_ok=True)
+        # Write a malformed (missing build_status) result.json
+        with open(os.path.join(cfg_dir, "result.json"), "w") as f:
+            json.dump({"id": "a"}, f)
+        merge_results_into_manifest(tmp)
+
+        with open(manifest_path) as f:
+            merged = json.load(f)
+        a = merged["configs"][0]
+        assert a["build_status"] == "infeasible"
+        assert "result.json failed validation" in (a["build_failure_reason"] or "")
+
+
+def test_merge_results_preserves_phase_a_entries_with_no_result_dir():
+    with tempfile.TemporaryDirectory() as tmp:
+        manifest_path = _phase_a_manifest_at(tmp, ["a", "b"])
+        # No configs/<id>/ dirs at all (Phase B never ran).
+        merge_results_into_manifest(tmp)
+
+        with open(manifest_path) as f:
+            merged = json.load(f)
+        assert {c["id"] for c in merged["configs"]} == {"a", "b"}
+        for c in merged["configs"]:
+            assert c["build_status"] == "infeasible"

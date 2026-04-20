@@ -21,6 +21,8 @@ class AuditConfig:
     log_level: str = "INFO"
     model: str = "claude-sonnet-4-6"
     target_au_count: int = 10
+    deployment_build_parallel: int = 1
+    deployment_build_timeout_sec: int = 1800   # 30-min wall-clock per build agent
 
 
 @dataclass

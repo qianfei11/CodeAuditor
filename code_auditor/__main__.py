@@ -22,6 +22,19 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--max-parallel", type=int, default=1, help="Maximum concurrent agents (default: 1)")
     parser.add_argument("--model", default="claude-sonnet-4-6", help="Claude model to use (default: claude-sonnet-4-6)")
     parser.add_argument("--target-au-count", type=int, default=10, help="Target number of analysis units for stage 3 (default: 10)")
+    parser.add_argument(
+        "--deployment-build-parallel",
+        type=int,
+        default=1,
+        help="Maximum concurrent deployment build agents in stage 2 (default: 1). "
+             "Separate from --max-parallel because builds are CPU/RAM heavy.",
+    )
+    parser.add_argument(
+        "--deployment-build-timeout-sec",
+        type=int,
+        default=1800,
+        help="Wall-clock seconds per deployment build agent (default: 1800).",
+    )
     parser.add_argument("--log-level", default="INFO", choices=["DEBUG", "INFO", "WARNING", "ERROR"])
     return parser
 
@@ -45,6 +58,8 @@ def main() -> None:
         log_level=args.log_level.upper(),
         model=args.model,
         target_au_count=args.target_au_count,
+        deployment_build_parallel=args.deployment_build_parallel,
+        deployment_build_timeout_sec=args.deployment_build_timeout_sec,
     )
 
     configure_logging(config.log_level)

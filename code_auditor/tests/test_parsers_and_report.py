@@ -4,6 +4,8 @@ import json
 import os
 import tempfile
 
+from code_auditor.__main__ import _build_parser
+from code_auditor.config import AuditConfig
 from code_auditor.parsing.stage3 import parse_au_files, parse_auditing_focus
 from code_auditor.validation.stage3 import (
     DEFAULT_MAX_ANALYSIS_UNITS,
@@ -258,5 +260,23 @@ def test_stage4_validator_rejects_non_array_propagation_chain():
         issues = validate_stage5_file(path)
         chain_issues = [i for i in issues if "propagation_chain" in i.description and "array" in i.description]
         assert len(chain_issues) == 1
+
+
+def test_cli_deployment_build_parallel_default_is_one():
+    parser = _build_parser()
+    args = parser.parse_args(["--target", "/tmp"])
+    assert args.deployment_build_parallel == 1
+
+
+def test_cli_deployment_build_parallel_can_be_overridden():
+    parser = _build_parser()
+    args = parser.parse_args(["--target", "/tmp", "--deployment-build-parallel", "4"])
+    assert args.deployment_build_parallel == 4
+
+
+def test_audit_config_has_deployment_build_fields():
+    config = AuditConfig(target="/tmp", output_dir="/tmp/out")
+    assert config.deployment_build_parallel == 1
+    assert config.deployment_build_timeout_sec == 1800
 
 

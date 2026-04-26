@@ -128,6 +128,8 @@ Vulnerabilities CodeAuditor has helped discover and disclose:
 
 CodeAuditor is intended for auditing code you own or have explicit permission to test, and for coordinated disclosure to upstream maintainers. Do not use it to target systems or projects without authorization.
 
+**Important:** Before sending any vulnerability report to project maintainers, manually review the generated disclosure materials. Verify that the vulnerability is real, the severity assessment is accurate, and the proof-of-concept actually reproduces the issue. Automated findings may contain false positives or inaccuracies that could waste maintainers' time or damage your credibility.
+
 ## License
 
 TBD.

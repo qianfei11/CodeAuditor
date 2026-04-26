@@ -132,4 +132,6 @@ CodeAuditor is intended for auditing code you own or have explicit permission to
 
 ## License
 
-TBD.
+Apache License 2.0 — see [LICENSE](LICENSE) for details.
+
+This software is provided for educational, research, and experimental purposes only. See the disclaimer at the top of the LICENSE file.

@@ -164,6 +164,7 @@ CodeAuditor is intended for auditing code you own or have explicit permission to
 
 **Important:** Before sending any vulnerability report to project maintainers, manually review the generated disclosure materials. Verify that the vulnerability is real, the severity assessment is accurate, and the proof-of-concept actually reproduces the issue. Automated findings may contain false positives or inaccuracies that could waste maintainers' time or damage your credibility.
 
+
 ## License
 
 Apache License 2.0 — see [LICENSE](LICENSE) for details.

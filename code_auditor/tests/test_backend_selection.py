@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 import sys
 
 import pytest
@@ -9,6 +10,7 @@ from code_auditor import __main__ as main_module
 from code_auditor import agent
 from code_auditor.__main__ import _build_parser
 from code_auditor.config import (
+    DEFAULT_AGENT_TIMEOUT_SECONDS,
     DEFAULT_BACKEND,
     DEFAULT_CLAUDE_POC_MODEL,
     DEFAULT_CODEX_POC_MODEL,
@@ -75,6 +77,33 @@ def test_main_maps_wiki_path_to_config(
     main_module.main()
 
     assert captured["config"].wiki_path == str(wiki.resolve())
+
+
+def test_main_logs_loaded_wiki_path(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    target = tmp_path / "target"
+    wiki = tmp_path / "wiki"
+    target.mkdir()
+    wiki.mkdir()
+
+    async def fake_run_audit(config: AuditConfig) -> None:
+        assert config.wiki_path == str(wiki.resolve())
+
+    monkeypatch.setattr(main_module, "run_audit", fake_run_audit)
+    monkeypatch.setattr(sys, "argv", [
+        "code-auditor",
+        "--target",
+        str(target),
+        "--wiki",
+        str(wiki),
+    ])
+
+    main_module.main()
+
+    assert f"Loaded wiki knowledge base: {wiki.resolve()}" in capsys.readouterr().err
 
 
 def test_main_rejects_missing_wiki_path(
@@ -159,6 +188,98 @@ def test_additional_directories_skips_wiki_when_it_is_cwd(tmp_path) -> None:  # 
     assert agent._additional_directories(config, str(target)) == [str(output.resolve())]
 
 
+def test_cli_accepts_enable_timeout() -> None:
+    args = _build_parser().parse_args([
+        "--target",
+        ".",
+        "--enable-timeout",
+    ])
+
+    assert args.enable_timeout is True
+
+
+def test_audit_config_disables_timeout_by_default() -> None:
+    config = AuditConfig(target="/tmp/project", output_dir="/tmp/output")
+
+    assert config.agent_timeout_seconds is None
+
+
+def test_cli_rejects_disable_timeout_option() -> None:
+    with pytest.raises(SystemExit) as exc:
+        _build_parser().parse_args([
+            "--target",
+            ".",
+            "--disable-timeout",
+        ])
+
+    assert exc.value.code == 2
+
+
+def test_cli_rejects_audit_only_option() -> None:
+    with pytest.raises(SystemExit) as exc:
+        _build_parser().parse_args([
+            "--target",
+            ".",
+            "--audit-only",
+        ])
+
+    assert exc.value.code == 2
+
+
+def test_cli_rejects_disable_reproduction_timeout_option() -> None:
+    with pytest.raises(SystemExit) as exc:
+        _build_parser().parse_args([
+            "--target",
+            ".",
+            "--disable-reproduction-timeout",
+        ])
+
+    assert exc.value.code == 2
+
+
+def test_main_disables_timeout_by_default(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path,
+) -> None:  # type: ignore[no-untyped-def]
+    captured: dict[str, AuditConfig] = {}
+
+    async def fake_run_audit(config: AuditConfig) -> None:
+        captured["config"] = config
+
+    monkeypatch.setattr(main_module, "run_audit", fake_run_audit)
+    monkeypatch.setattr(sys, "argv", [
+        "code-auditor",
+        "--target",
+        str(tmp_path),
+    ])
+
+    main_module.main()
+
+    assert captured["config"].agent_timeout_seconds is None
+
+
+def test_main_maps_enable_timeout_to_config(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path,
+) -> None:  # type: ignore[no-untyped-def]
+    captured: dict[str, AuditConfig] = {}
+
+    async def fake_run_audit(config: AuditConfig) -> None:
+        captured["config"] = config
+
+    monkeypatch.setattr(main_module, "run_audit", fake_run_audit)
+    monkeypatch.setattr(sys, "argv", [
+        "code-auditor",
+        "--target",
+        str(tmp_path),
+        "--enable-timeout",
+    ])
+
+    main_module.main()
+
+    assert captured["config"].agent_timeout_seconds == DEFAULT_AGENT_TIMEOUT_SECONDS
+
+
 @pytest.mark.parametrize(
     ("backend", "config_model", "expected_model"),
     [
@@ -214,6 +335,68 @@ def test_run_agent_dispatches_to_codex_backend(monkeypatch: pytest.MonkeyPatch) 
         config = AuditConfig(target="/tmp/project", output_dir="/tmp/output", backend="codex")
 
         assert await agent.run_agent("prompt", config, cwd="/tmp/project") == "codex-result"
+
+    asyncio.run(run_case())
+
+
+def test_run_agent_logs_subagent_lifecycle(
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    async def run_case() -> None:
+        async def fake_codex_agent(*_args, **_kwargs) -> str:  # type: ignore[no-untyped-def]
+            return "codex-result"
+
+        async def fake_claude_agent(*_args, **_kwargs) -> str:  # type: ignore[no-untyped-def]
+            raise AssertionError("Claude backend should not be called")
+
+        monkeypatch.setattr(agent, "_run_codex_agent", fake_codex_agent)
+        monkeypatch.setattr(agent, "_run_claude_agent", fake_claude_agent)
+
+        config = AuditConfig(target="/tmp/project", output_dir="/tmp/output", backend="codex")
+
+        with caplog.at_level(logging.INFO, logger="code_auditor.agent"):
+            assert await agent.run_agent("prompt", config, cwd="/tmp/project") == "codex-result"
+
+        lifecycle_messages = [
+            record.getMessage()
+            for record in caplog.records
+            if record.name == "code_auditor.agent" and record.levelno == logging.INFO
+        ]
+        assert any("Creating codex subagent" in message for message in lifecycle_messages)
+        assert any(
+            "Destroyed codex subagent" in message and "status=completed" in message
+            for message in lifecycle_messages
+        )
+
+    asyncio.run(run_case())
+
+
+def test_run_agent_logs_subagent_destruction_on_failure(
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    async def run_case() -> None:
+        async def fake_codex_agent(*_args, **_kwargs) -> str:  # type: ignore[no-untyped-def]
+            raise RuntimeError("backend failed")
+
+        monkeypatch.setattr(agent, "_run_codex_agent", fake_codex_agent)
+
+        config = AuditConfig(target="/tmp/project", output_dir="/tmp/output", backend="codex")
+
+        with caplog.at_level(logging.INFO, logger="code_auditor.agent"):
+            with pytest.raises(RuntimeError, match="backend failed"):
+                await agent.run_agent("prompt", config, cwd="/tmp/project")
+
+        lifecycle_messages = [
+            record.getMessage()
+            for record in caplog.records
+            if record.name == "code_auditor.agent" and record.levelno == logging.INFO
+        ]
+        assert any(
+            "Destroyed codex subagent" in message and "status=failed" in message
+            for message in lifecycle_messages
+        )
 
     asyncio.run(run_case())
 

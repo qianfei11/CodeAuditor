@@ -19,7 +19,6 @@ logger = get_logger("stage5")
 # building projects, writing exploit code, running/debugging, and iterating.
 _MAX_TURNS = 500
 _DEFAULT_EFFORT = "medium"
-_POC_TIMEOUT = 20 * 60  # 20 minutes
 
 
 def _task_key(vuln_id: str) -> str:
@@ -73,6 +72,9 @@ async def _run_reproduce(
     })
 
     log_file = os.path.join(poc_dir, "agent.log")
+    timeout_seconds = config.agent_timeout_seconds
+    if timeout_seconds is None:
+        logger.info("Stage 5: Agent timeout disabled for %s.", vuln_id)
 
     timed_out = False
     task = asyncio.create_task(
@@ -86,7 +88,7 @@ async def _run_reproduce(
             log_file=log_file,
         )
     )
-    done, _ = await asyncio.wait({task}, timeout=_POC_TIMEOUT)
+    done, _ = await asyncio.wait({task}, timeout=timeout_seconds)
 
     if not done:
         # Timed out — cancel and allow a short grace period for cleanup.
@@ -97,7 +99,7 @@ async def _run_reproduce(
             logger.warning("Stage 5: %s agent task did not exit after cancel, moving on.", vuln_id)
         logger.warning(
             "Stage 5: %s timed out after %d minutes — marking as false positive.",
-            vuln_id, _POC_TIMEOUT // 60,
+            vuln_id, timeout_seconds // 60,
         )
     else:
         # Task completed — re-raise if it failed (but not for CancelledError).
@@ -117,7 +119,7 @@ async def _run_reproduce(
             f.write(
                 f"# {vuln_id} — False Positive (timeout)\n\n"
                 f"PoC development did not produce a working exploit within "
-                f"the {_POC_TIMEOUT // 60}-minute time limit. "
+                f"the {timeout_seconds // 60}-minute time limit. "
                 f"Marking as false positive.\n"
             )
         # Preserve the agent log in the _fp directory before cleanup.

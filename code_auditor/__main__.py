@@ -5,7 +5,13 @@ import asyncio
 import os
 import sys
 
-from .config import DEFAULT_BACKEND, DEFAULT_CLAUDE_MODEL, DEFAULT_CODEX_MODEL, AuditConfig
+from .config import (
+    DEFAULT_AGENT_TIMEOUT_SECONDS,
+    DEFAULT_BACKEND,
+    DEFAULT_CLAUDE_MODEL,
+    DEFAULT_CODEX_MODEL,
+    AuditConfig,
+)
 from .logger import configure_logging, get_logger
 from .orchestrator import run_audit
 
@@ -34,9 +40,9 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--target-au-count", type=int, default=10, help="Target number of analysis units for stage 2 (default: 10)")
     parser.add_argument("--log-level", default="INFO", choices=["DEBUG", "INFO", "WARNING", "ERROR"])
     parser.add_argument(
-        "--audit-only",
+        "--enable-timeout",
         action="store_true",
-        help="Run only stages 1-4 (skip PoC reproduction and disclosure stages 5-6)",
+        help="Enable per-stage agent timeouts",
     )
     return parser
 
@@ -67,7 +73,7 @@ def main() -> None:
     output_dir = os.path.realpath(args.output_dir or os.path.join(target, "audit-output"))
     wiki_path = _resolve_wiki_path(args.wiki)
 
-    skip_stages = [5, 6] if args.audit_only else []
+    agent_timeout_seconds = DEFAULT_AGENT_TIMEOUT_SECONDS if args.enable_timeout else None
 
     config = AuditConfig(
         target=target,
@@ -79,10 +85,12 @@ def main() -> None:
         backend=args.backend,
         model=args.model,
         target_au_count=args.target_au_count,
-        skip_stages=skip_stages,
+        agent_timeout_seconds=agent_timeout_seconds,
     )
 
     configure_logging(config.log_level)
+    if config.wiki_path:
+        logger.info("Loaded wiki knowledge base: %s", config.wiki_path)
     logger.info("Starting audit of %s", config.target)
 
     try:

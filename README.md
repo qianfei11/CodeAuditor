@@ -55,6 +55,7 @@ code-auditor --target /path/to/project [options]
 | `--model` | Backend model override. Claude defaults to `claude-sonnet-4-6`; Codex uses the local Codex config default unless specified. |
 | `--target-au-count` | Target number of analysis units for Stage 2 (default: `10`). |
 | `--log-level` | `DEBUG` \| `INFO` \| `WARNING` \| `ERROR` (default: `INFO`). |
+| `--enable-timeout` | Enable per-stage agent timeouts. By default, CodeAuditor runs without per-stage agent timeouts for long-running targets such as QEMU. |
 
 ### Wiki knowledge base
 

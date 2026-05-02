@@ -18,7 +18,6 @@ logger = get_logger("stage6")
 # polished disclosure artifacts — similar complexity to Stage 5.
 _MAX_TURNS = 500
 _DEFAULT_EFFORT = "medium"
-_DISCLOSURE_TIMEOUT = 20 * 60  # 20 minutes
 
 
 def _task_key(vuln_id: str) -> str:
@@ -99,6 +98,9 @@ async def _run_disclosure(
     })
 
     log_file = os.path.join(stage6_vuln_dir, "agent.log")
+    timeout_seconds = config.agent_timeout_seconds
+    if timeout_seconds is None:
+        logger.info("Stage 6: Agent timeout disabled for %s.", vuln_id)
 
     timed_out = False
     task = asyncio.create_task(
@@ -112,7 +114,7 @@ async def _run_disclosure(
             log_file=log_file,
         )
     )
-    done, _ = await asyncio.wait({task}, timeout=_DISCLOSURE_TIMEOUT)
+    done, _ = await asyncio.wait({task}, timeout=timeout_seconds)
 
     if not done:
         timed_out = True
@@ -122,7 +124,7 @@ async def _run_disclosure(
             logger.warning("Stage 6: %s agent task did not exit after cancel, moving on.", vuln_id)
         logger.warning(
             "Stage 6: %s timed out after %d minutes.",
-            vuln_id, _DISCLOSURE_TIMEOUT // 60,
+            vuln_id, timeout_seconds // 60,
         )
     else:
         exc = task.exception()

@@ -10,6 +10,7 @@ DEFAULT_CLAUDE_MODEL = "claude-sonnet-4-6"
 DEFAULT_CLAUDE_POC_MODEL = "claude-opus-4-6"
 DEFAULT_CODEX_MODEL = "gpt-5.4"
 DEFAULT_CODEX_POC_MODEL = "gpt-5.5"
+DEFAULT_AGENT_TIMEOUT_SECONDS = 20 * 60
 
 DEFAULT_THREAT_MODEL = (
     "Network attacker with full control over protocol messages. "
@@ -32,6 +33,7 @@ class AuditConfig:
     backend: AgentBackend = DEFAULT_BACKEND
     model: str | None = None
     target_au_count: int = 10
+    agent_timeout_seconds: int | None = None
 
 
 def select_poc_model(config: AuditConfig) -> str:

@@ -31,6 +31,8 @@ code-auditor --target /path/to/project [--output-dir DIR] [--max-parallel 2] [--
 #   --only-stage       Run only this stage (+ stage 0); mutually exclusive with --skip-stages
 #   --model            Claude model to use (default claude-sonnet-4-6)
 #   --target-au-count  Target number of analysis units for stage 2 (default 30)
+#   --enable-timeout
+#                      Enable per-stage agent timeouts (default: disabled)
 #   --log-level        DEBUG|INFO|WARNING|ERROR (default INFO)
 ```
 

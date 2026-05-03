@@ -1,3 +1,7 @@
+<p align="center">
+  <b>🇺🇸 English</b> | <a href="README.zh.md">中文</a>
+</p>
+
 # CodeAuditor
 
 A multi-stage, agentic code auditing pipeline that can run on the [Claude Code SDK](https://github.com/anthropics/claude-code-sdk-python) or the [Codex App Server Python SDK](https://github.com/openai/codex/blob/main/sdk/python/README.md). Given a target source tree, CodeAuditor researches project context, decomposes the codebase into analysis units, hunts for bugs, evaluates them as security vulnerabilities, reproduces them with a working PoC, and finally prepares a disclosure-ready report package.
@@ -19,6 +23,38 @@ The audit runs as seven sequential stages. Each stage is driven by a prompt temp
 | 6 | Disclosure: technical report, email, minimal PoC, zipped package | 1 agent per vulnerability |
 
 Stage 1 produces two directives — an *auditing focus* and *vulnerability criteria* — that are injected into later stages so the whole pipeline stays aligned with the project's actual threat model.
+
+### System Design
+
+```
+┌─────────────┐
+│ Target Repo │
+└──────┬──────┘
+       │
+       ▼
+┌─────────────┐     ┌─────────────────────────────┐
+│  Stage 0    │     │      DIRECTIVE INJECTION    │
+│    Init     │────►│  ┌─────────┐  ┌─────────┐  │
+└─────────────┘     │  │Auditing │  │Vuln     │  │
+       │            │  │ Focus   │  │Criteria │  │
+       ▼            │  └───┬─────┘  └────┬────┘  │
+┌─────────────┐     │      │             │       │
+│  Stage 1    │────►│      └──────┬──────┘       │
+│   Context   │     └─────────────┼──────────────┘
+└─────────────┘                   │
+       │                          │
+       ▼                          ▼
+┌─────────────┐   ┌─────────────┐   ┌─────────────┐   ┌─────────────┐   ┌─────────────┐
+│  Stage 2    │──►│  Stage 3    │──►│  Stage 4    │──►│  Stage 5    │──►│  Stage 6    │
+│  Decompose  │   │   Discover  │   │   Evaluate  │   │     PoC     │   │   Disclose  │
+└─────────────┘   └─────────────┘   └─────────────┘   └─────────────┘   └──────┬──────┘
+                                                                                 │
+                                                                                 ▼
+                                                                          ┌─────────────┐
+                                                                          │  Disclosure │
+                                                                          │   Package   │
+                                                                          └─────────────┘
+```
 
 ## Requirements
 
@@ -137,29 +173,29 @@ pytest -k stage2             # filter by name
 
 Tests cover parsers and validators; they do not make real agent calls.
 
-## Vulnerabilities found
+## Vulnerabilities Found
 
 Vulnerabilities CodeAuditor has helped discover and disclose:
 
-### [httpd](https://github.com/apache/httpd)
-- CVE-2026-28780
-- CVE-2026-34032
-
-### [ImageMagick](https://github.com/ImageMagick/ImageMagick)
-- CVE-2026-40312
-
-### [libexif](https://github.com/libexif/libexif)
-- CVE-2026-40385
-- CVE-2026-40386
-
-### [QEMU](https://gitlab.com/qemu-project/qemu)
-- CVE-2026-7180
+| CVE ID | Project | Year | Reference |
+|--------|---------|------|-----------|
+| CVE-2026-28780 | [httpd](https://github.com/apache/httpd) | 2026 | [GitHub](https://github.com/apache/httpd) |
+| CVE-2026-34032 | [httpd](https://github.com/apache/httpd) | 2026 | [GitHub](https://github.com/apache/httpd) |
+| CVE-2026-40312 | [ImageMagick](https://github.com/ImageMagick/ImageMagick) | 2026 | [GitHub](https://github.com/ImageMagick/ImageMagick) |
+| CVE-2026-40385 | [libexif](https://github.com/libexif/libexif) | 2026 | [GitHub](https://github.com/libexif/libexif) |
+| CVE-2026-40386 | [libexif](https://github.com/libexif/libexif) | 2026 | [GitHub](https://github.com/libexif/libexif) |
+| CVE-2026-7180 | [QEMU](https://gitlab.com/qemu-project/qemu) | 2026 | [GitLab](https://gitlab.com/qemu-project/qemu) |
+| Embargoed | [GStreamer](https://gitlab.freedesktop.org/gstreamer/gstreamer) | 2026 | [#5035](https://gitlab.freedesktop.org/gstreamer/gstreamer/-/work_items/5035) |
+| Embargoed | [GStreamer](https://gitlab.freedesktop.org/gstreamer/gstreamer) | 2026 | [#5036](https://gitlab.freedesktop.org/gstreamer/gstreamer/-/work_items/5036) |
+| Embargoed | [GStreamer](https://gitlab.freedesktop.org/gstreamer/gstreamer) | 2026 | [#5038](https://gitlab.freedesktop.org/gstreamer/gstreamer/-/work_items/5038) |
+| Embargoed | [GStreamer](https://gitlab.freedesktop.org/gstreamer/gstreamer) | 2026 | [#5039](https://gitlab.freedesktop.org/gstreamer/gstreamer/-/work_items/5039) |
 
 ## Responsible use
 
 CodeAuditor is intended for auditing code you own or have explicit permission to test, and for coordinated disclosure to upstream maintainers. Do not use it to target systems or projects without authorization.
 
 **Important:** Before sending any vulnerability report to project maintainers, manually review the generated disclosure materials. Verify that the vulnerability is real, the severity assessment is accurate, and the proof-of-concept actually reproduces the issue. Automated findings may contain false positives or inaccuracies that could waste maintainers' time or damage your credibility.
+
 
 ## License
 

@@ -13,7 +13,7 @@ from .stages.stage3 import run_stage3
 from .stages.stage4 import run_stage4
 from .stages.stage5 import run_stage5
 from .stages.stage6 import run_stage6
-from .utils import list_json_files
+from .utils import _natural_sort_key, list_json_files
 
 logger = get_logger("orchestrator")
 
@@ -84,7 +84,7 @@ async def run_audit(config: AuditConfig) -> None:
         logger.info("Stage 5 skipped. Loading existing reports.")
         stage5_dir = os.path.join(config.output_dir, "stage5-pocs")
         if os.path.isdir(stage5_dir):
-            for name in sorted(os.listdir(stage5_dir)):
+            for name in sorted(os.listdir(stage5_dir), key=_natural_sort_key):
                 entry = os.path.join(stage5_dir, name)
                 if os.path.isdir(entry):
                     report = os.path.join(entry, "report.md")

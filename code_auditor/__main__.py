@@ -14,6 +14,7 @@ from .config import (
 )
 from .logger import configure_logging, get_logger
 from .orchestrator import run_audit
+from .tui import TUIManager, configure_rich_logging
 
 logger = get_logger("main")
 
@@ -43,6 +44,11 @@ def _build_parser() -> argparse.ArgumentParser:
         "--enable-timeout",
         action="store_true",
         help="Enable per-stage agent timeouts",
+    )
+    parser.add_argument(
+        "--tui",
+        action="store_true",
+        help="Launch the interactive TUI dashboard",
     )
     return parser
 
@@ -88,17 +94,42 @@ def main() -> None:
         agent_timeout_seconds=agent_timeout_seconds,
     )
 
-    configure_logging(config.log_level)
-    if config.wiki_path:
-        logger.info("Loaded wiki knowledge base: %s", config.wiki_path)
-    logger.info("Starting audit of %s", config.target)
+    if args.tui:
+        # TUI mode: Rich live dashboard
+        tui = TUIManager()
+        tui.configure(
+            target=config.target,
+            output_dir=config.output_dir,
+            backend=config.backend,
+            model=config.model,
+            max_parallel=config.max_parallel,
+        )
+        configure_logging(config.log_level)
+        if config.wiki_path:
+            logger.info("Loaded wiki knowledge base: %s", config.wiki_path)
+        logger.info("Starting audit of %s", config.target)
 
-    try:
-        asyncio.run(run_audit(config))
-        print("\nAudit complete.")
-    except Exception as e:
-        print(f"\nError: {e}", file=sys.stderr)
-        sys.exit(1)
+        tui.start()
+        try:
+            asyncio.run(run_audit(config, tui=tui))
+        except Exception as e:
+            tui.set_error(str(e))
+            logger.error("Audit failed: %s", e)
+        finally:
+            tui.stop()
+    else:
+        # Classic mode: plain log output
+        configure_logging(config.log_level)
+        if config.wiki_path:
+            logger.info("Loaded wiki knowledge base: %s", config.wiki_path)
+        logger.info("Starting audit of %s", config.target)
+
+        try:
+            asyncio.run(run_audit(config))
+            print("\nAudit complete.")
+        except Exception as e:
+            print(f"\nError: {e}", file=sys.stderr)
+            sys.exit(1)
 
 
 if __name__ == "__main__":

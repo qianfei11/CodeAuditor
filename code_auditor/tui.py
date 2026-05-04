@@ -187,7 +187,7 @@ def _make_stage_panel(state: TUIState) -> Panel:
         detail = st.detail or desc
         table.add_row(str(stage_num), name, detail, status_text, progress_text, time_text)
 
-    return Panel(table, title="[bold]Pipeline Stages[/bold]", border_style=ACCENT, padding=(1, 1))
+    return Panel(table, title="[bold]Pipeline Stages[/bold]", border_style=ACCENT, padding=(1, 1), height=10)
 
 
 def _make_log_panel(state: TUIState) -> Panel:

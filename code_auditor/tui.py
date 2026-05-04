@@ -9,6 +9,7 @@ Provides a beautiful dashboard that shows:
 from __future__ import annotations
 
 import logging
+import threading
 import time
 from contextlib import contextmanager
 from dataclasses import dataclass, field
@@ -265,6 +266,8 @@ class TUIManager:
         self._console = Console()
         self._live: Live | None = None
         self._log_handler: _TUILogHandler | None = None
+        self._refresh_thread: threading.Thread | None = None
+        self._stop_refresh = threading.Event()
 
     # ── Configuration ───────────────────────────────────────────────────
 
@@ -304,15 +307,30 @@ class TUIManager:
             console=self._console,
             refresh_per_second=4,
             screen=True,
+            vertical_overflow="visible",
         )
         self._live.start()
+
+        # Background thread to keep elapsed/progress updated while stage is running
+        def _bg_refresh() -> None:
+            while not self._stop_refresh.is_set():
+                self._refresh()
+                self._stop_refresh.wait(0.25)
+
+        self._stop_refresh.clear()
+        self._refresh_thread = threading.Thread(target=_bg_refresh, daemon=True)
+        self._refresh_thread.start()
 
     def stop(self) -> None:
         """Stop the live display and remove the log handler."""
         self._state.finished = True
+        self._stop_refresh.set()
+        if self._refresh_thread:
+            self._refresh_thread.join(timeout=1.0)
+            self._refresh_thread = None
         if self._live:
             self._live.refresh()
-            time.sleep(0.5)  # Brief pause to show summary
+            time.sleep(0.1)
             self._live.stop()
             self._live = None
 

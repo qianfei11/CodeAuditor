@@ -100,6 +100,7 @@ def main() -> None:
         tui.configure(
             target=config.target,
             output_dir=config.output_dir,
+            wiki_path=config.wiki_path,
             backend=config.backend,
             model=config.model,
             max_parallel=config.max_parallel,

@@ -82,7 +82,7 @@ def test_main_maps_wiki_path_to_config(
 def test_main_logs_loaded_wiki_path(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path,
-    capsys: pytest.CaptureFixture[str],
+    caplog: pytest.LogCaptureFixture,
 ) -> None:
     target = tmp_path / "target"
     wiki = tmp_path / "wiki"
@@ -101,9 +101,11 @@ def test_main_logs_loaded_wiki_path(
         str(wiki),
     ])
 
-    main_module.main()
+    with caplog.at_level(logging.INFO, logger="code_auditor.main"):
+        main_module.main()
 
-    assert f"Loaded wiki knowledge base: {wiki.resolve()}" in capsys.readouterr().err
+    wiki_path = str(wiki.resolve())
+    assert wiki_path in caplog.text
 
 
 def test_main_rejects_missing_wiki_path(

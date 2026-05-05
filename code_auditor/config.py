@@ -3,13 +3,15 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Literal
 
-AgentBackend = Literal["claude", "codex"]
+AgentBackend = Literal["claude", "codex", "opencode"]
 
 DEFAULT_BACKEND: AgentBackend = "claude"
 DEFAULT_CLAUDE_MODEL = "claude-sonnet-4-6"
 DEFAULT_CLAUDE_POC_MODEL = "claude-opus-4-6"
 DEFAULT_CODEX_MODEL = "gpt-5.4"
 DEFAULT_CODEX_POC_MODEL = "gpt-5.5"
+DEFAULT_OPENCODE_MODEL = "MiniMax-M2.7"
+DEFAULT_OPENCODE_POC_MODEL = "MiniMax-M2.7"
 DEFAULT_AGENT_TIMEOUT_SECONDS = 20 * 60
 
 DEFAULT_THREAT_MODEL = (
@@ -41,7 +43,9 @@ def select_poc_model(config: AuditConfig) -> str:
         return config.model
     if config.backend == "claude":
         return DEFAULT_CLAUDE_POC_MODEL
-    return DEFAULT_CODEX_POC_MODEL
+    if config.backend == "codex":
+        return DEFAULT_CODEX_POC_MODEL
+    return DEFAULT_OPENCODE_POC_MODEL
 
 
 @dataclass

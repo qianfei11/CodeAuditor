@@ -10,6 +10,7 @@ from .config import (
     DEFAULT_BACKEND,
     DEFAULT_CLAUDE_MODEL,
     DEFAULT_CODEX_MODEL,
+    DEFAULT_OPENCODE_MODEL,
     AuditConfig,
 )
 from .logger import configure_logging, get_logger
@@ -30,13 +31,13 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--max-parallel", type=int, default=1, help="Maximum concurrent agents (default: 1)")
     parser.add_argument(
         "--backend",
-        choices=["claude", "codex"],
+        choices=["claude", "codex", "opencode"],
         default=DEFAULT_BACKEND,
         help="Agent backend to use (default: claude)",
     )
     parser.add_argument(
         "--model",
-        help=f"Backend model override (Claude default: {DEFAULT_CLAUDE_MODEL}; Codex default: {DEFAULT_CODEX_MODEL})",
+        help=f"Backend model override (Claude default: {DEFAULT_CLAUDE_MODEL}; Codex default: {DEFAULT_CODEX_MODEL}; OpenCode default: {DEFAULT_OPENCODE_MODEL})",
     )
     parser.add_argument("--target-au-count", type=int, default=10, help="Target number of analysis units for stage 2 (default: 10)")
     parser.add_argument("--log-level", default="INFO", choices=["DEBUG", "INFO", "WARNING", "ERROR"])
@@ -117,7 +118,7 @@ def main() -> None:
             tui.set_error(str(e))
             logger.error("Audit failed: %s", e)
         finally:
-            tui.stop()
+            tui.wait_for_exit()
     else:
         # Classic mode: plain log output
         configure_logging(config.log_level)

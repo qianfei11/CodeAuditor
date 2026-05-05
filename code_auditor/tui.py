@@ -348,6 +348,37 @@ class TUIManager:
         self._console.print(_make_summary(self._state))
         self._console.print()
 
+    def wait_for_exit(self) -> None:
+        """Show final dashboard and wait for user to press q to exit."""
+        self._state.finished = True
+        self._stop_refresh.set()
+        if self._refresh_thread:
+            self._refresh_thread.join(timeout=1.0)
+            self._refresh_thread = None
+
+        if self._live:
+            self._live.update(_render_dashboard(self._state))
+            self._live.refresh()
+
+        self._console.print()
+        self._console.print("[bold cyan]Audit complete. Press [bold white]q[/bold white] to exit...[/bold cyan]")
+        self._console.print()
+
+        if self._log_handler:
+            root_logger = logging.getLogger("code_auditor")
+            root_logger.removeHandler(self._log_handler)
+            self._log_handler = None
+
+        if self._live:
+            self._live.stop()
+            self._live = None
+
+        key = ""
+        while key.lower() != "q":
+            key = self._console.input("")
+
+        self._console.print("[cyan]Goodbye![/cyan]")
+
     def _refresh(self) -> None:
         if self._live:
             self._live.update(_render_dashboard(self._state))

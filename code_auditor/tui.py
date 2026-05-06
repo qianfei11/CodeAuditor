@@ -68,7 +68,7 @@ class TUIState:
     model: str = ""
     max_parallel: int = 1
     stages: dict[int, _StageState] = field(default_factory=dict)
-    log_lines: list[str] = field(default_factory=list)
+    log_lines: list[Text] = field(default_factory=list)
     max_log_lines: int = 40
     finished: bool = False
     error: str = ""
@@ -86,18 +86,29 @@ class _TUILogHandler(logging.Handler):
 
     def emit(self, record: logging.LogRecord) -> None:
         try:
-            msg = self.format(record)
-            if record.levelno == logging.DEBUG:
-                msg = f"[dim]{msg}[/dim]"
-            elif record.levelno == logging.INFO:
-                msg = f"[cyan]{msg}[/cyan]"
-            elif record.levelno == logging.WARNING:
-                msg = f"[yellow]{msg}[/yellow]"
-            elif record.levelno == logging.ERROR:
-                msg = f"[red]{msg}[/red]"
-            elif record.levelno >= logging.CRITICAL:
-                msg = f"[red bold]{msg}[/red bold]"
-            self._state.log_lines.append(msg)
+            ts = time.strftime("%H:%M:%S", time.localtime(record.created))
+            levelname = record.levelname
+            name = record.name
+            message = record.getMessage()
+
+            levelno = record.levelno
+
+            if levelno == logging.DEBUG:
+                style = DIM
+            elif levelno == logging.INFO:
+                style = ACCENT
+            elif levelno == logging.WARNING:
+                style = WARN
+            else:
+                style = ERROR
+
+            text = Text()
+            text.append(f"{ts} ", style=DIM)
+            text.append(f"[{levelname}]", style=style)
+            text.append(f" {name}: ", style=DIM)
+            text.append(message, style=style)
+
+            self._state.log_lines.append(text)
             if len(self._state.log_lines) > self._state.max_log_lines:
                 self._state.log_lines = self._state.log_lines[-self._state.max_log_lines:]
         except Exception:
@@ -189,14 +200,14 @@ def _make_stage_panel(state: TUIState) -> Panel:
         detail = st.detail or desc
         table.add_row(str(stage_num), name, detail, status_text, progress_text, time_text)
 
-    return Panel(table, title="[bold]Pipeline Stages[/bold]", border_style=ACCENT, padding=(1, 1), height=10)
+    return Panel(table, title="[bold]Pipeline Stages[/bold]", border_style=ACCENT, padding=(1, 1), height=14)
 
 
 def _make_log_panel(state: TUIState) -> Panel:
     if not state.log_lines:
         content = Text("Waiting for logs...", style=DIM)
     else:
-        content = Text("\n".join(state.log_lines[-state.max_log_lines:]))
+        content = Text("\n", style="").join(state.log_lines[-state.max_log_lines:])
     return Panel(
         content,
         title="[bold]Live Log[/bold]",
@@ -233,7 +244,7 @@ def _render_dashboard(state: TUIState) -> Layout:
 
     body_children = [
         Layout(_make_config_table(state), size=7, name="config"),
-        Layout(_make_stage_panel(state), name="stages"),
+        Layout(_make_stage_panel(state), size=12, name="stages"),
         Layout(_make_log_panel(state), name="logs"),
     ]
 

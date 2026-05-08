@@ -10,12 +10,11 @@ from .config import (
     DEFAULT_BACKEND,
     DEFAULT_CLAUDE_MODEL,
     DEFAULT_CODEX_MODEL,
-    DEFAULT_OPENCODE_MODEL,
     AuditConfig,
 )
 from .logger import configure_logging, get_logger
 from .orchestrator import run_audit
-from .tui import TUIManager, configure_rich_logging
+from .tui import TUIManager
 
 logger = get_logger("main")
 
@@ -31,13 +30,13 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--max-parallel", type=int, default=1, help="Maximum concurrent agents (default: 1)")
     parser.add_argument(
         "--backend",
-        choices=["claude", "codex", "opencode"],
+        choices=["claude", "codex"],
         default=DEFAULT_BACKEND,
         help="Agent backend to use (default: claude)",
     )
     parser.add_argument(
         "--model",
-        help=f"Backend model override (Claude default: {DEFAULT_CLAUDE_MODEL}; Codex default: {DEFAULT_CODEX_MODEL}; OpenCode default: {DEFAULT_OPENCODE_MODEL})",
+        help=f"Backend model override (Claude default: {DEFAULT_CLAUDE_MODEL}; Codex default: {DEFAULT_CODEX_MODEL})",
     )
     parser.add_argument("--target-au-count", type=int, default=10, help="Target number of analysis units for stage 2 (default: 10)")
     parser.add_argument("--log-level", default="INFO", choices=["DEBUG", "INFO", "WARNING", "ERROR"])
@@ -66,6 +65,11 @@ def _resolve_wiki_path(path: str | None) -> str | None:
         print(f"Error: Wiki path is not a directory: {resolved}", file=sys.stderr)
         sys.exit(1)
     return resolved
+
+
+def _exit_after_keyboard_interrupt() -> None:
+    print("\nInterrupted by user.", file=sys.stderr)
+    sys.exit(130)
 
 
 def main() -> None:
@@ -107,18 +111,29 @@ def main() -> None:
             max_parallel=config.max_parallel,
         )
         configure_logging(config.log_level)
+        tui.start()
         if config.wiki_path:
             logger.info("Loaded wiki knowledge base: %s", config.wiki_path)
         logger.info("Starting audit of %s", config.target)
 
-        tui.start()
+        failed = False
+        interrupted = False
         try:
             asyncio.run(run_audit(config, tui=tui))
+        except KeyboardInterrupt:
+            interrupted = True
+            tui.request_exit()
+            tui.set_error("Interrupted by user.")
         except Exception as e:
+            failed = True
             tui.set_error(str(e))
             logger.error("Audit failed: %s", e)
         finally:
             tui.wait_for_exit()
+        if interrupted:
+            _exit_after_keyboard_interrupt()
+        if failed:
+            sys.exit(1)
     else:
         # Classic mode: plain log output
         configure_logging(config.log_level)
@@ -129,6 +144,8 @@ def main() -> None:
         try:
             asyncio.run(run_audit(config))
             print("\nAudit complete.")
+        except KeyboardInterrupt:
+            _exit_after_keyboard_interrupt()
         except Exception as e:
             print(f"\nError: {e}", file=sys.stderr)
             sys.exit(1)

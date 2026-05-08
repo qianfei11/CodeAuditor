@@ -143,6 +143,9 @@ async def _run_disclosure(
     done, _ = await asyncio.wait({task}, timeout=timeout_seconds)
 
     if not done:
+        if timeout_seconds is None:
+            raise AssertionError("Stage 6 timed out without a configured timeout.")
+        timeout_minutes = timeout_seconds // 60
         timed_out = True
         task.cancel()
         grace_done, _ = await asyncio.wait({task}, timeout=30)
@@ -150,7 +153,7 @@ async def _run_disclosure(
             logger.warning("Stage 6: %s agent task did not exit after cancel, moving on.", vuln_id)
         logger.warning(
             "Stage 6: %s timed out after %d minutes.",
-            vuln_id, timeout_seconds // 60,
+            vuln_id, timeout_minutes,
         )
     else:
         exc = task.exception()

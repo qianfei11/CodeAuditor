@@ -86,15 +86,6 @@ async def run_audit(config: AuditConfig, tui: TUIManager | None = None) -> None:
         if tui:
             tui.begin_stage(3, f"Discovering bugs across {total_aus} AUs")
 
-        # Wrap the stage3 call with progress tracking
-        _original_done = [0]
-        _stage3_tui = tui
-
-        class _ProgressProxy:
-            """Wraps run_stage3 to emit progress events to the TUI."""
-            def __init__(self):
-                self.files: list[str] = []
-
         bug_files = await run_stage3(
             analysis_units, config, checkpoint,
             auditing_focus_path, vuln_criteria_path,

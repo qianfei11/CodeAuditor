@@ -7,10 +7,10 @@ import subprocess
 import time
 from contextvars import ContextVar
 from dataclasses import dataclass, field
-from typing import Awaitable, Callable, TextIO
+from typing import Callable, Coroutine, Protocol, TextIO
 from uuid import uuid4
 
-from .config import DEFAULT_CLAUDE_MODEL, DEFAULT_CODEX_MODEL, DEFAULT_OPENCODE_MODEL, AuditConfig, ValidationIssue
+from .config import DEFAULT_CLAUDE_MODEL, DEFAULT_CODEX_MODEL, AuditConfig, ValidationIssue
 from .logger import get_logger
 from .utils import format_validation_issues
 
@@ -22,8 +22,13 @@ DEFAULT_CODEX_BIN = "/usr/local/bin/codex"
 
 logger = get_logger("agent")
 
+class _KillableProcess(Protocol):
+    def kill(self) -> object:
+        ...
+
+
 _claude_sdk_patched = False
-_AGENT_PROCESS_REGISTRAR: ContextVar[Callable[[object], None] | None] = ContextVar(
+_AGENT_PROCESS_REGISTRAR: ContextVar[Callable[[_KillableProcess | None], None] | None] = ContextVar(
     "agent_process_registrar",
     default=None,
 )
@@ -35,10 +40,10 @@ class AgentLogStaleError(RuntimeError):
 
 @dataclass
 class _AgentRunControl:
-    processes: list[object] = field(default_factory=list)
+    processes: list[_KillableProcess] = field(default_factory=list)
     killed_due_to_stale_log: bool = False
 
-    def register_process(self, process: object | None) -> None:
+    def register_process(self, process: _KillableProcess | None) -> None:
         if process is None or process in self.processes:
             return
         self.processes.append(process)
@@ -69,7 +74,7 @@ class _AgentRunControl:
                 logger.warning("Failed to kill stale agent process pid=%s: %s", pid, exc)
 
 
-def _register_current_agent_process(process: object | None) -> None:
+def _register_current_agent_process(process: _KillableProcess | None) -> None:
     registrar = _AGENT_PROCESS_REGISTRAR.get()
     if registrar:
         registrar(process)
@@ -93,7 +98,7 @@ async def _watch_agent_log_for_staleness(log_file: str, run_control: _AgentRunCo
 
 
 async def _run_agent_attempt_with_stale_log_watch(
-    attempt: Awaitable[str],
+    attempt: Coroutine[object, object, str],
     *,
     log_file: str | None,
     run_control: _AgentRunControl,
@@ -218,17 +223,6 @@ def _load_claude_sdk():  # type: ignore[no-untyped-def]
     return ClaudeCodeOptions, query
 
 
-def _load_opencode_sdk():  # type: ignore[no-untyped-def]
-    try:
-        from opencode_ai import AsyncOpencode
-    except ImportError as exc:
-        raise RuntimeError(
-            "OpenCode backend requires the opencode-ai package. "
-            "Install project dependencies before using --backend opencode."
-        ) from exc
-
-    return AsyncOpencode
-
 DEFAULT_TOOLS = ["Read", "Glob", "Grep", "Write", "Edit", "Bash"]
 
 
@@ -313,7 +307,7 @@ async def _run_claude_agent(
                     log_fh.write(f"\n--- retry attempt {attempt + 1} ---\n\n")
                     log_fh.flush()
 
-                async def collect_messages() -> str:
+                async def collect_messages(parts: list[str]) -> str:
                     token = _AGENT_PROCESS_REGISTRAR.set(run_control.register_process)
                     try:
                         async for message in query(prompt=prompt, options=options):
@@ -322,17 +316,17 @@ async def _run_claude_agent(
                             if hasattr(message, "content"):
                                 for block in message.content:
                                     if hasattr(block, "text"):
-                                        text_parts.append(block.text)
+                                        parts.append(block.text)
                                         if log_fh:
                                             log_fh.write(block.text)
                                             log_fh.write("\n")
                                             log_fh.flush()
-                        return "\n".join(text_parts)
+                        return "\n".join(parts)
                     finally:
                         _AGENT_PROCESS_REGISTRAR.reset(token)
 
                 return await _run_agent_attempt_with_stale_log_watch(
-                    collect_messages(),
+                    collect_messages(text_parts),
                     log_file=log_file,
                     run_control=run_control,
                 )
@@ -454,79 +448,6 @@ async def _run_codex_agent(
             log_fh.close()
 
 
-async def _run_opencode_agent(
-    prompt: str,
-    config: AuditConfig,
-    cwd: str,
-    allowed_tools: list[str] | None = None,
-    max_turns: int = 30,
-    model: str | None = None,
-    effort: str | None = None,
-    log_file: str | None = None,
-    run_control: _AgentRunControl | None = None,
-) -> str:
-    AsyncOpencode = _load_opencode_sdk()
-
-    selected_model = model or config.model or DEFAULT_OPENCODE_MODEL
-    log_fh = _open_agent_log(log_file)
-    run_control = run_control or _AgentRunControl()
-
-    last_exc: Exception | None = None
-    try:
-        for attempt in range(AGENT_MAX_RETRIES):
-            try:
-                if log_fh and attempt > 0:
-                    log_fh.write(f"\n--- retry attempt {attempt + 1} ---\n\n")
-                    log_fh.flush()
-
-                async def run_opencode_turn() -> str:
-                    async with AsyncOpencode() as client:
-                        session = await client.session.create()
-                        await client.session.init(
-                            id=session.id,
-                            message_id="initial",
-                            model_id=selected_model,
-                            provider_id="opencode",
-                        )
-                        result = await client.session.chat(
-                            id=session.id,
-                            model_id=selected_model,
-                            provider_id="opencode",
-                            parts=[{"type": "text", "text": prompt}],
-                        )
-                    return result.content if hasattr(result, "content") else str(result)
-
-                text = await _run_agent_attempt_with_stale_log_watch(
-                    run_opencode_turn(),
-                    log_file=log_file,
-                    run_control=run_control,
-                )
-                if log_fh:
-                    log_fh.write(text)
-                    log_fh.write("\n")
-                    log_fh.flush()
-                return text
-            except AgentLogStaleError as exc:
-                logger.warning("OpenCode agent stopped because its log file went stale: %s", exc)
-                return ""
-            except Exception as exc:
-                last_exc = exc
-                if attempt < AGENT_MAX_RETRIES - 1:
-                    delay = AGENT_RETRY_BASE_DELAY * (2 ** attempt)
-                    logger.warning(
-                        "OpenCode agent call failed (attempt %d/%d), retrying in %ds: %s",
-                        attempt + 1, AGENT_MAX_RETRIES, delay, exc,
-                    )
-                    await asyncio.sleep(delay)
-                else:
-                    logger.error("OpenCode agent call failed after %d attempts: %s", AGENT_MAX_RETRIES, exc)
-
-        raise last_exc  # type: ignore[misc]
-    finally:
-        if log_fh and not log_fh.closed:
-            log_fh.close()
-
-
 async def run_agent(
     prompt: str,
     config: AuditConfig,
@@ -537,13 +458,13 @@ async def run_agent(
     effort: str | None = None,
     log_file: str | None = None,
 ) -> str:
-    if config.backend not in ("codex", "claude", "opencode"):
+    if config.backend not in ("codex", "claude"):
         raise ValueError(f"Unsupported agent backend: {config.backend}")
 
     selected_model = (
         model
         or config.model
-        or (DEFAULT_CODEX_MODEL if config.backend == "codex" else DEFAULT_CLAUDE_MODEL if config.backend == "claude" else DEFAULT_OPENCODE_MODEL)
+        or (DEFAULT_CODEX_MODEL if config.backend == "codex" else DEFAULT_CLAUDE_MODEL)
     )
     subagent_id = uuid4().hex[:8]
     started_at = time.monotonic()
@@ -562,18 +483,6 @@ async def run_agent(
     try:
         if config.backend == "codex":
             result = await _run_codex_agent(
-                prompt,
-                config,
-                cwd,
-                allowed_tools=allowed_tools,
-                max_turns=max_turns,
-                model=model,
-                effort=effort,
-                log_file=log_file,
-                run_control=run_control,
-            )
-        elif config.backend == "opencode":
-            result = await _run_opencode_agent(
                 prompt,
                 config,
                 cwd,

@@ -39,7 +39,8 @@ def parse_auditing_focus(path: str) -> tuple[str, str]:
     Returns (scope_modules, hot_spots) body text.
     """
     try:
-        content = open(path).read()
+        with open(path) as f:
+            content = f.read()
     except OSError:
         return "", ""
 

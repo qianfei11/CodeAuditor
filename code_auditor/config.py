@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Literal
 
 AgentBackend = Literal["claude", "codex"]
@@ -45,6 +46,12 @@ def select_poc_model(config: AuditConfig) -> str:
     if config.backend == "codex":
         return DEFAULT_CODEX_POC_MODEL
     raise ValueError(f"Unsupported agent backend: {config.backend}")
+
+
+def resolve_discovered_path(config: AuditConfig) -> str:
+    if config.discovered_path:
+        return config.discovered_path
+    return str(Path(config.target) / "reproduced-bugs.md")
 
 
 @dataclass

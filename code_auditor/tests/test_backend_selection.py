@@ -24,7 +24,7 @@ from code_auditor.config import (
     AuditConfig,
     select_poc_model,
 )
-from code_auditor.tui import TUIManager, TUIState, _TUILogHandler, _make_log_panel, _visible_log_lines
+from code_auditor.tui import TUIManager, TUIState, _TUILogHandler, _make_config_table, _make_log_panel, _visible_log_lines
 
 
 def test_cli_backend_defaults_to_claude() -> None:
@@ -71,6 +71,17 @@ def test_cli_accepts_wiki_path() -> None:
     assert args.wiki == "/tmp/wiki"
 
 
+def test_cli_accepts_discovered_path() -> None:
+    args = _build_parser().parse_args([
+        "--target",
+        ".",
+        "--discovered",
+        "/tmp/bugs.md",
+    ])
+
+    assert args.discovered == "/tmp/bugs.md"
+
+
 def test_main_maps_wiki_path_to_config(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path,
@@ -96,6 +107,80 @@ def test_main_maps_wiki_path_to_config(
     main_module.main()
 
     assert captured["config"].wiki_path == str(wiki.resolve())
+
+
+def test_main_maps_omitted_discovered_to_target_reproduced_bugs(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path,
+) -> None:  # type: ignore[no-untyped-def]
+    captured: dict[str, AuditConfig] = {}
+    target = tmp_path / "target"
+    target.mkdir()
+
+    async def fake_run_audit(config: AuditConfig) -> None:
+        captured["config"] = config
+
+    monkeypatch.setattr(main_module, "run_audit", fake_run_audit)
+    monkeypatch.setattr(sys, "argv", [
+        "code-auditor",
+        "--target",
+        str(target),
+    ])
+
+    main_module.main()
+
+    assert captured["config"].discovered_path == str((target / "reproduced-bugs.md").resolve())
+
+
+def test_main_maps_explicit_discovered_to_resolved_file(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path,
+) -> None:  # type: ignore[no-untyped-def]
+    captured: dict[str, AuditConfig] = {}
+    target = tmp_path / "target"
+    discovered = tmp_path / "missing-parent" / "bugs.md"
+    target.mkdir()
+
+    async def fake_run_audit(config: AuditConfig) -> None:
+        captured["config"] = config
+
+    monkeypatch.setattr(main_module, "run_audit", fake_run_audit)
+    monkeypatch.setattr(sys, "argv", [
+        "code-auditor",
+        "--target",
+        str(target),
+        "--discovered",
+        str(discovered),
+    ])
+
+    main_module.main()
+
+    assert captured["config"].discovered_path == str(discovered.resolve())
+
+
+def test_main_rejects_existing_directory_as_discovered_path(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    target = tmp_path / "target"
+    discovered = tmp_path / "discovered-dir"
+    target.mkdir()
+    discovered.mkdir()
+
+    monkeypatch.setattr(sys, "argv", [
+        "code-auditor",
+        "--target",
+        str(target),
+        "--discovered",
+        str(discovered),
+    ])
+
+    with pytest.raises(SystemExit) as exc:
+        main_module.main()
+
+    assert exc.value.code == 1
+    assert capsys.readouterr().err == f"Error: Discovered path is a directory: {discovered.resolve()}\n"
 
 
 def test_main_logs_loaded_wiki_path(
@@ -532,6 +617,28 @@ def test_tui_log_handler_retains_history_beyond_visible_limit() -> None:
         ))
 
     assert len(state.log_lines) == 3
+
+
+def test_tui_configure_displays_discovered_path() -> None:
+    manager = TUIManager()
+    discovered_path = "/tmp/project/reproduced-bugs.md"
+
+    manager.configure(
+        target="/tmp/project",
+        output_dir="/tmp/output",
+        discovered_path=discovered_path,
+        wiki_path=None,
+        backend="claude",
+        model=None,
+        max_parallel=1,
+    )
+
+    console = logger_module.Console(record=True, force_terminal=False, color_system=None, width=120)
+    console.print(_make_config_table(manager._state))
+    rendered = console.export_text(styles=False)
+
+    assert "Discovered" in rendered
+    assert discovered_path in rendered
 
 
 def test_tui_log_handler_splits_multiline_records_into_scrollable_rows() -> None:

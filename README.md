@@ -85,6 +85,7 @@ code-auditor --target /path/to/project [options]
 |------|-------------|
 | `--target` | **Required.** Root directory of the project to audit. |
 | `--output-dir` | Output directory (default: `{target}/audit-output`). |
+| `--discovered` | Reproduced bugs markdown file used by Stage 6 (default: `{target}/reproduced-bugs.md`). Pass a path to override where this cross-run record is read and updated. |
 | `--wiki` | LLM wiki knowledge base directory. CodeAuditor treats it as read-only and gives agents stage-specific wiki search guidance. |
 | `--max-parallel` | Max concurrent agents (default: `1`). |
 | `--backend` | Agent backend: `claude` or `codex` (default: `claude`). |
@@ -92,6 +93,8 @@ code-auditor --target /path/to/project [options]
 | `--target-au-count` | Target number of analysis units for Stage 2 (default: `10`). |
 | `--log-level` | `DEBUG` \| `INFO` \| `WARNING` \| `ERROR` (default: `INFO`). |
 | `--enable-timeout` | Enable per-stage agent timeouts. By default, CodeAuditor runs without per-stage agent timeouts for long-running targets such as QEMU. |
+
+By default, Stage 6 creates or updates `{target}/reproduced-bugs.md`. Before generating disclosures, Stage 6 reads this file and skips reproduced bugs with matching dedupe metadata. After Stage 6 successfully writes disclosure output for a new reproduced bug, it appends a new entry to the same file. Use `--discovered /path/to/reproduced-bugs.md` to read and update a different markdown file.
 
 ### Wiki knowledge base
 
@@ -143,6 +146,8 @@ code-auditor \
 ├── stage6-disclosures/       # disclosure reports, emails, zipped PoCs
 └── .markers/          # checkpoint markers for --resume
 ```
+
+Stage 6 also creates or updates `{target}/reproduced-bugs.md` by default. This target-root file is outside `{output-dir}` unless you point `--discovered` somewhere else.
 
 ## Project layout
 

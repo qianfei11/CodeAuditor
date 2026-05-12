@@ -51,7 +51,7 @@ def select_poc_model(config: AuditConfig) -> str:
 def resolve_discovered_path(config: AuditConfig) -> str:
     if config.discovered_path:
         return config.discovered_path
-    return str(Path(config.target) / "reproduced-bugs.md")
+    return str(Path(config.target) / "reproduced-bugs.html")
 
 
 @dataclass
